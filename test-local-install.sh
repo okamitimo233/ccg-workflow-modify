@@ -10,7 +10,7 @@ echo "📦 步骤 1: 打包..."
 npm pack
 
 # 2. 获取包文件名
-PACKAGE_FILE=$(ls -t ccg-workflow-*.tgz | head -1)
+PACKAGE_FILE=$(ls -t ccg-workflow-modify-*.tgz | head -1)
 echo "✅ 包文件: $PACKAGE_FILE"
 
 # 3. 备份当前配置

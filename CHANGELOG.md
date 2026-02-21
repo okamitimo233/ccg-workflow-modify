@@ -387,7 +387,7 @@ VSCode 插件启动的子进程不会继承终端环境变量，必须通过 `se
 
 #### 问题背景
 
-用户反馈：当通过 npm 全局安装且当前版本已是最新版本时，系统仍然提示用户运行 `npm install -g ccg-workflow@latest`，导致用户困惑。
+用户反馈：当通过 npm 全局安装且当前版本已是最新版本时，系统仍然提示用户运行 `npm install -g ccg-workflow-modify@latest`，导致用户困惑。
 
 **场景重现**：
 ```
@@ -398,7 +398,7 @@ VSCode 插件启动的子进程不会继承终端环境变量，必须通过 `se
 检测到本地工作流版本(v1.7.25)低于当前版本(v1.7.37)，是否更新? Yes
 ⚠️  检测到你是通过 npm 全局安装的
 推荐的更新方式:
-npm install -g ccg-workflow@latest  ← 用户困惑：明明已经是最新版本了
+npm install -g ccg-workflow-modify@latest  ← 用户困惑：明明已经是最新版本了
 ```
 
 #### 修复方案
@@ -423,7 +423,7 @@ if (isGlobalInstall && !isNewVersion) {
 // 如果全局安装且包有新版本
 else if (isGlobalInstall && isNewVersion) {
   console.log('⚠️  检测到你是通过 npm 全局安装的')
-  console.log('推荐的更新方式: npm install -g ccg-workflow@latest')
+  console.log('推荐的更新方式: npm install -g ccg-workflow-modify@latest')
   // 提示用户更新包
 }
 ```
@@ -450,12 +450,12 @@ else if (isGlobalInstall && isNewVersion) {
 确认要更新到 v1.7.38 吗? Yes
 ⚠️  检测到你是通过 npm 全局安装的
 推荐的更新方式:
-npm install -g ccg-workflow@latest
+npm install -g ccg-workflow-modify@latest
 ```
 
 ### 📦 版本更新
 
-- **ccg-workflow**: 1.7.37 → 1.7.38
+- **ccg-workflow-modify**: 1.7.37 → 1.7.38
 
 ---
 
@@ -512,7 +512,7 @@ export async function installAceToolRs(config: AceToolConfig): Promise<...> {
 
 **初始化时选择**：
 ```bash
-npx ccg-workflow
+npx ccg-workflow-modify
 
 # 选择 MCP 工具
 ? 选择 MCP 工具
@@ -523,7 +523,7 @@ npx ccg-workflow
 
 **后续配置**：
 ```bash
-npx ccg-workflow config mcp
+npx ccg-workflow-modify config mcp
 
 # 选择操作
 ? 选择操作
@@ -571,7 +571,7 @@ npx ccg-workflow config mcp
 
 ### 📦 版本更新
 
-- **ccg-workflow**: 1.7.36 → 1.7.37
+- **ccg-workflow-modify**: 1.7.36 → 1.7.37
 
 ---
 
@@ -628,7 +628,7 @@ if !envFlagEnabled("CODEX_REQUIRE_APPROVAL") {
 
 ### 📦 版本更新
 
-- **ccg-workflow**: 1.7.35 → 1.7.36
+- **ccg-workflow-modify**: 1.7.35 → 1.7.36
 - **codeagent-wrapper**: 5.6.0 → 5.7.0
 
 ---
@@ -921,7 +921,7 @@ if isWindows() {
 
 #### 问题背景
 
-用户在 Windows 系统上通过 `npx ccg-workflow` 更新时遇到错误：
+用户在 Windows 系统上通过 `npx ccg-workflow-modify` 更新时遇到错误：
 ```
 Binary not found in package: codeagent-wrapper-windows-amd64.exe
 ```
@@ -1037,7 +1037,7 @@ if isWindows() {
 
 #### 问题背景
 
-用户通过 `npx ccg-workflow` 运行时，npm 包已是最新版本，但本地工作流可能是旧版本（例如 v1.7.10 安装的）。
+用户通过 `npx ccg-workflow-modify` 运行时，npm 包已是最新版本，但本地工作流可能是旧版本（例如 v1.7.10 安装的）。
 
 原因：`checkForUpdates()` 只比较 npm registry 版本，没有比较本地配置版本 (`config.general.version`)。
 
@@ -1115,7 +1115,7 @@ Windows 用户使用 PowerShell 执行命令时，路径格式不兼容：
 
 #### 问题背景
 
-用户通过 `npm install -g ccg-workflow` 全局安装后，存在双重路径问题：
+用户通过 `npm install -g ccg-workflow-modify` 全局安装后，存在双重路径问题：
 - npm 全局包路径（提供 `ccg` 命令入口）
 - 用户工作目录 `~/.claude/`（存储命令模板、配置等）
 
@@ -1127,18 +1127,18 @@ Windows 用户使用 PowerShell 执行命令时，路径格式不兼容：
 
 1. **新增全局安装检测**
    - ✅ 新增 `checkIfGlobalInstall()` 函数检测 npm 全局安装
-   - ✅ 通过 `npm list -g ccg-workflow --depth=0` 判断
+   - ✅ 通过 `npm list -g ccg-workflow-modify --depth=0` 判断
    - 📝 修改文件：`src/commands/update.ts`, `src/commands/menu.ts`
 
 2. **修复更新功能**
-   - ✅ 检测到全局安装时，引导用户使用 `npm install -g ccg-workflow@latest`
+   - ✅ 检测到全局安装时，引导用户使用 `npm install -g ccg-workflow-modify@latest`
    - ✅ 提供交互式选择：推荐 npm 更新 / 继续内置更新（仅更新工作流文件）
    - ✅ 明确告知内置更新不会更新 `ccg` 命令本身
    - 📝 修改文件：`src/commands/update.ts`
 
 3. **修复卸载功能**
    - ✅ 卸载前提示"完整卸载需要两步"
-   - ✅ 卸载后显示第二步提示：`npm uninstall -g ccg-workflow`
+   - ✅ 卸载后显示第二步提示：`npm uninstall -g ccg-workflow-modify`
    - ✅ 说明完成后 `ccg` 命令将彻底移除
    - 📝 修改文件：`src/commands/menu.ts`
 
@@ -1149,7 +1149,7 @@ Windows 用户使用 PowerShell 执行命令时，路径格式不兼容：
 ⚠️  检测到你是通过 npm 全局安装的
 
 推荐的更新方式：
-  npm install -g ccg-workflow@latest
+  npm install -g ccg-workflow-modify@latest
 
 这将同时更新命令和工作流文件
 
@@ -1171,7 +1171,7 @@ Windows 用户使用 PowerShell 执行命令时，路径格式不兼容：
 🔸 最后一步：卸载 npm 全局包
 
 请在新的终端窗口中运行：
-  npm uninstall -g ccg-workflow
+  npm uninstall -g ccg-workflow-modify
 
 (完成后 ccg 命令将彻底移除)
 ```
@@ -1356,8 +1356,8 @@ Windows 用户使用 PowerShell 执行命令时，路径格式不兼容：
 
 ### 🔄 升级说明
 
-- 已安装用户：运行 `npx ccg-workflow@latest` → 选择"更新工作流"
-- 新用户：直接运行 `npx ccg-workflow` 安装即可
+- 已安装用户：运行 `npx ccg-workflow-modify@latest` → 选择"更新工作流"
+- 新用户：直接运行 `npx ccg-workflow-modify` 安装即可
 - 自动应用所有改进，保留用户配置
 
 ---
@@ -1611,7 +1611,7 @@ C:\Users\yao> npx ccg init
 #### 升级说明
 
 已安装 v1.4.1 的用户：
-1. 运行 `npx ccg-workflow@latest init` 更新
+1. 运行 `npx ccg-workflow-modify@latest init` 更新
 2. Windows 用户可运行 `npx ccg fix-mcp` 修复现有配置
 3. 所有用户可运行 `npx ccg diagnose-mcp` 验证配置
 
@@ -1647,7 +1647,7 @@ C:\Users\yao> npx ccg init
 
 如果你已经安装了 v1.4.0，请重新运行安装命令更新模板：
 ```bash
-npx ccg-workflow@latest init
+npx ccg-workflow-modify@latest init
 ```
 
 ---
@@ -1703,7 +1703,7 @@ npx ccg-workflow@latest init
 
 #### 自动迁移
 
-✨ **无需手动操作**！运行 `npx ccg-workflow@latest init` 会自动：
+✨ **无需手动操作**！运行 `npx ccg-workflow-modify@latest init` 会自动：
 1. 检测旧版本配置
 2. 迁移所有文件到新位置
 3. 清理旧文件（安全检查后）
@@ -1729,7 +1729,7 @@ cp -r ~/.ccg ~/.ccg.backup
 cp -r ~/.claude/prompts/ccg ~/.claude/prompts/ccg.backup
 
 # 2. 运行升级
-npx ccg-workflow@latest init
+npx ccg-workflow-modify@latest init
 
 # 3. 验证配置
 cat ~/.claude/.ccg/config.toml
@@ -1848,7 +1848,7 @@ const agentsDestDir = join(installDir, 'agents', 'ccg')
 - ✅ **不影响命令**：Slash commands 仍在 `~/.claude/commands/ccg/`
 
 #### 影响范围
-- **所有平台**：通过 `npx ccg-workflow init` 或 `python3 install.py` 安装的用户
+- **所有平台**：通过 `npx ccg-workflow-modify init` 或 `python3 install.py` 安装的用户
 - **Subagents**：planner, ui-ux-designer, init-architect, get-current-datetime
 - **向下兼容**：旧路径的 agents 不会被自动清理，需要手动删除
 
@@ -2023,7 +2023,7 @@ console.log(ansis.gray(`     }`))
 #### 用户体验
 
 - **安装流程**：
-  1. 运行 `python3 install.py` 或 `npx ccg-workflow`
+  1. 运行 `python3 install.py` 或 `npx ccg-workflow-modify`
   2. 看到 MCP 选择菜单，对比功能后选择
   3. 自动安装并配置对应的 MCP 工具
   4. 生成配置文件，记录选择
@@ -2223,7 +2223,7 @@ EOF
 
 ### 用户体验
 
-- 运行 `npx ccg-workflow` 选择"更新工作流"即可更新
+- 运行 `npx ccg-workflow-modify` 选择"更新工作流"即可更新
 - 显示当前版本 vs 最新版本对比
 - 自动更新所有文件并保留配置
 - 提供友好的进度提示和错误处理
@@ -2295,7 +2295,7 @@ EOF
 #### 安装方式革命性升级
 
 - ✅ 从 Python 脚本重构为 **TypeScript + unbuild** 构建系统
-- ✅ 发布到 npm: `npx ccg-workflow` 一键安装
+- ✅ 发布到 npm: `npx ccg-workflow-modify` 一键安装
 - ✅ 交互式配置菜单（初始化/卸载）
 - ✅ 更好的跨平台兼容性
 
@@ -2389,6 +2389,6 @@ EOF
 
 ## 链接
 
-- [GitHub Repository](https://github.com/fengshao1227/ccg-workflow)
-- [npm Package](https://www.npmjs.com/package/ccg-workflow)
-- [README](https://github.com/fengshao1227/ccg-workflow/blob/main/README.md)
+- [GitHub Repository](https://github.com/fengshao1227/ccg-workflow-modify)
+- [npm Package](https://www.npmjs.com/package/ccg-workflow-modify)
+- [README](https://github.com/fengshao1227/ccg-workflow-modify/blob/main/README.md)

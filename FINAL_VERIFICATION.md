@@ -66,7 +66,7 @@
 ### 本地测试
 ```bash
 # 1. 安装测试包
-npx ./ccg-workflow-1.7.55.tgz
+npx ./ccg-workflow-modify-1.7.55.tgz
 
 # 2. 验证文件
 ls -la ~/.claude/commands/ccg/spec-*.md
@@ -124,4 +124,4 @@ grep '/opsx:' ~/.claude/commands/ccg/spec-*.md | grep -v 'OPSX Commands'
 ---
 
 **状态**: ✅ 准备发布  
-**包文件**: `ccg-workflow-1.7.55.tgz` (30.5 MB)
+**包文件**: `ccg-workflow-modify-1.7.55.tgz` (30.5 MB)

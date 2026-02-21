@@ -2,13 +2,16 @@
 
 > [根目录](../CLAUDE.md) > **skills-v2**
 
-**Last Updated**: 2026-02-10 (v1.7.60)
+**Last Updated**: 2026-02-21 (v1.7.61)
 
 ---
 
 ## 变更记录 (Changelog)
 
 > 完整变更历史请查看 [CHANGELOG.md](./CHANGELOG.md)
+
+### 2026-02-10 (v1.7.61)
+- 🐛 **修复**：`package.json` files 白名单补全 team 系列模板
 
 ### 2026-02-10 (v1.7.60)
 - ✨ **Agent Teams 系列**：新增 4 个独立命令（`team-research`/`team-plan`/`team-exec`/`team-review`）
@@ -41,11 +44,12 @@
 **CCG (Claude + Codex + Gemini)** - 多模型协作系统的核心实现，提供：
 
 1. **多模型协作编排**：固定路由 Gemini（前端）+ Codex（后端）+ Claude（编排）
-2. **25 个斜杠命令**：开发工作流 + Git 工具 + 项目管理 + OPSX + Agent Teams
-3. **13 个专家提示词**：Codex 6 个 + Gemini 7 个
+2. **26 个斜杠命令**：开发工作流 + Git 工具 + 项目管理 + OPSX + Agent Teams
+3. **19 个专家提示词**：Codex 6 个 + Gemini 7 个 + Claude 6 个
 4. **跨平台 CLI 工具**：一键安装（支持 macOS、Linux、Windows）
 5. **MCP 集成**：ContextWeaver（推荐）/ ace-tool（收费）+ 辅助工具
 6. **Agent Teams 并行实施**：Team 系列 4 个独立命令，spawn Builder teammates 并行写代码
+7. **输出风格配置**：5 种可选输出风格（v1.7.58+）
 
 ---
 
@@ -55,10 +59,10 @@
 
 ```bash
 # 一键安装（推荐）
-npx ccg-workflow
+npx ccg-workflow-modify
 
 # 交互式菜单
-npx ccg-workflow menu
+npx ccg-workflow-modify menu
 ```
 
 ### CLI 入口点
@@ -89,12 +93,12 @@ npx ccg-workflow menu
 
 | 命令 | 用途 |
 |------|------|
-| `npx ccg-workflow` | 一键安装/菜单 |
-| `npx ccg-workflow menu` | 交互式菜单 |
-| `npx ccg-workflow update` | 更新到最新版本 |
-| `npx ccg-workflow diagnose-mcp` | 诊断 MCP 配置 |
+| `npx ccg-workflow-modify` | 一键安装/菜单 |
+| `npx ccg-workflow-modify menu` | 交互式菜单 |
+| `npx ccg-workflow-modify update` | 更新到最新版本 |
+| `npx ccg-workflow-modify diagnose-mcp` | 诊断 MCP 配置 |
 
-### Slash Commands 接口（16 个）
+### Slash Commands 接口（26 个）
 
 **开发工作流**：
 | 命令 | 用途 | 模型 |
@@ -105,6 +109,7 @@ npx ccg-workflow menu
 | `/ccg:frontend` | 前端专项（快速模式） | Gemini |
 | `/ccg:backend` | 后端专项（快速模式） | Codex |
 | `/ccg:feat` | 智能功能开发 | 规划 → 实施 |
+| `/ccg:enhance` | 内置 Prompt 增强 | Claude |
 | `/ccg:analyze` | 技术分析（仅分析） | Codex ∥ Gemini |
 | `/ccg:debug` | 问题诊断 + 修复 | Codex ∥ Gemini |
 | `/ccg:optimize` | 性能优化 | Codex ∥ Gemini |
@@ -115,6 +120,15 @@ npx ccg-workflow menu
 | 命令 | 用途 |
 |------|------|
 | `/ccg:init` | 初始化项目 CLAUDE.md |
+
+**OPSX（OpenSpec）**：
+| 命令 | 用途 |
+|------|------|
+| `/ccg:spec-init` | 初始化 OPSX 环境 + 验证 MCP |
+| `/ccg:spec-research` | 需求 → 约束集（并行探索 + OPSX 提案） |
+| `/ccg:spec-plan` | 多模型分析 → 消除歧义 → 零决策计划 |
+| `/ccg:spec-impl` | 按规范执行 + 多模型协作 + 归档 |
+| `/ccg:spec-review` | 双模型交叉审查 |
 
 **Git 工具**：
 | 命令 | 用途 |
@@ -144,7 +158,7 @@ v1.7.0 起，以下配置不再支持自定义：
 | 前端模型 | Gemini | 擅长 UI/CSS/组件 |
 | 后端模型 | Codex | 擅长逻辑/算法/调试 |
 | 协作模式 | smart | 最佳实践 |
-| 命令数量 | 25 个 | 全部安装 |
+| 命令数量 | 26 个 | 全部安装 |
 
 ---
 
@@ -203,13 +217,14 @@ src/
 
 ```
 templates/
-├── commands/                  # 25 个斜杠命令
+├── commands/                  # 26 个斜杠命令
 │   ├── workflow.md
 │   ├── plan.md                # 多模型协作规划
 │   ├── execute.md             # 多模型协作执行
 │   ├── frontend.md
 │   ├── backend.md
 │   ├── feat.md
+│   ├── enhance.md             # 内置 Prompt 增强
 │   ├── analyze.md
 │   ├── debug.md
 │   ├── optimize.md
@@ -220,6 +235,11 @@ templates/
 │   ├── rollback.md
 │   ├── clean-branches.md
 │   ├── worktree.md
+│   ├── spec-init.md           # OPSX 初始化
+│   ├── spec-research.md       # OPSX 需求→约束
+│   ├── spec-plan.md           # OPSX 规划
+│   ├── spec-impl.md           # OPSX 实施
+│   ├── spec-review.md         # OPSX 审查
 │   ├── team-research.md       # Agent Teams 需求→约束
 │   ├── team-plan.md           # Agent Teams 规划
 │   ├── team-exec.md           # Agent Teams 并行实施
@@ -229,11 +249,16 @@ templates/
 │       ├── ui-ux-designer.md
 │       ├── init-architect.md
 │       └── get-current-datetime.md
-├── prompts/                  # 13 个专家提示词
-│   ├── codex/
-│   └── gemini/
-└── skills/                   # 1 个 skill
-    └── multi-model-collaboration/
+├── prompts/                  # 19 个专家提示词
+│   ├── codex/                # 6 个（analyzer/architect/debugger/optimizer/reviewer/tester）
+│   ├── gemini/               # 7 个（analyzer/architect/debugger/frontend/optimizer/reviewer/tester）
+│   └── claude/               # 6 个（analyzer/architect/debugger/optimizer/reviewer/tester）
+└── output-styles/            # 5 种输出风格
+    ├── abyss-cultivator.md
+    ├── engineer-professional.md
+    ├── laowang-engineer.md
+    ├── nekomata-engineer.md
+    └── ojousama-engineer.md
 ```
 
 ### 预编译产物
@@ -255,13 +280,13 @@ bin/
 
 ```mermaid
 graph TD
-    User["用户"] --> CLI["npx ccg-workflow"]
+    User["用户"] --> CLI["npx ccg-workflow-modify"]
     CLI --> Init["一键安装"]
     
-    Init --> Commands["~/.claude/commands/ccg/<br/>16 个命令"]
+    Init --> Commands["~/.claude/commands/ccg/<br/>26 个命令"]
     Init --> Agents["~/.claude/agents/ccg/<br/>4 个子智能体"]
     Init --> Skills["~/.claude/skills/<br/>1 个 skill"]
-    Init --> Prompts["~/.claude/.ccg/prompts/<br/>13 个专家提示词"]
+    Init --> Prompts["~/.claude/.ccg/prompts/<br/>19 个专家提示词"]
     Init --> Binary["~/.claude/bin/<br/>codeagent-wrapper"]
     Init --> MCP["~/.claude.json<br/>MCP 配置（可选）"]
 
@@ -327,4 +352,4 @@ git push origin main
 ---
 
 **扫描覆盖率**: 95%+
-**最后更新**: 2026-02-10
+**最后更新**: 2026-02-21

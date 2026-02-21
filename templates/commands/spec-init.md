@@ -73,7 +73,7 @@ description: '初始化 OpenSpec (OPSX) 环境 + 验证多模型 MCP 工具'
      - If tool available: Mark as "✓ Active".
      - If config exists but tool missing: Mark as "⚠️ Configured but inactive (Try restarting Claude)".
      - If neither: Mark as "○ Not installed (Optional)".
-   - If not installed/configured, suggest: "Run `npx ccg-workflow` and select ace-tool MCP option."
+   - If not installed/configured, suggest: "Run `npx ccg-workflow-modify` and select ace-tool MCP option."
 
 6. **Summary Report**
    Display status table:
@@ -100,7 +100,7 @@ description: '初始化 OpenSpec (OPSX) 环境 + 验证多模型 MCP 工具'
 **Reference**
 - OpenSpec (OPSX) CLI: `npx @fission-ai/openspec --help`
 - OPSX Commands: `/opsx:new`, `/opsx:continue`, `/opsx:apply`, etc.
-- CCG Workflow: `npx ccg-workflow`
+- CCG Workflow: `npx ccg-workflow-modify`
 - Codex/Gemini MCP: Bundled with codeagent-wrapper
 - Node.js >= 18.x required for OpenSpec
 <!-- CCG:SPEC:INIT:END -->
