@@ -2,7 +2,6 @@
 
 <div align="center">
 
-[![npm version](https://img.shields.io/npm/v/ccg-workflow-modify.svg)](https://www.npmjs.com/package/ccg-workflow-modify)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-Compatible-green.svg)](https://claude.ai/code)
 
@@ -13,7 +12,11 @@ Claude Code 编排 Codex + Gemini 的多模型协作开发系统。前端任务�
 ## 安装
 
 ```bash
-npx ccg-workflow-modify
+# 从 GitHub 安装（推荐）
+npx github:okamitimo233/ccg-workflow-modify
+
+# 指定分支
+npx github:okamitimo233/ccg-workflow-modify#refactor
 ```
 
 **要求**：Claude Code CLI、Node.js 20+
@@ -186,13 +189,11 @@ npx ccg-workflow-modify menu  # 选择「安装 Claude Code」
 ## 更新 / 卸载
 
 ```bash
-# 更新
-npx ccg-workflow-modify@latest          # npx 用户
-npm install -g ccg-workflow-modify@latest  # npm 全局用户
+# 更新（重新安装最新版本）
+npx github:okamitimo233/ccg-workflow-modify
 
 # 卸载
-npx ccg-workflow-modify  # 选择 "卸载工作流"
-npm uninstall -g ccg-workflow-modify  # npm 全局用户需额外执行
+npx github:okamitimo233/ccg-workflow-modify  # 选择 "卸载工作流"
 ```
 
 ## 已知问题

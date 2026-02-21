@@ -325,20 +325,41 @@ graph TD
 - 添加变更记录条目
 - 更新命令数量、接口表等受影响的章节
 
-### 5. 构建 + 发布 + 推送
+### 5. 构建 + 提交 + 推送
 
 ```bash
 # 构建
 pnpm build
 
-# 发布 npm 包
-npm publish
+# 暂存所有变更（含 dist/ 构建产物）
+git add package.json CLAUDE.md CHANGELOG.md README.md dist/ <其他变更文件>
 
-# 提交到 Git
-git add -A
+# 提交
 git commit -m "chore: bump version to x.y.z"
-git push origin main
+
+# 推送到 GitHub
+git push origin <当前分支>
 ```
+
+### 6. 发布渠道
+
+本项目通过 **GitHub 仓库** 分发，用户直接从 GitHub 安装：
+
+```bash
+# 安装（指定分支）
+npx github:okamitimo233/ccg-workflow-modify#<分支名>
+
+# 安装（默认分支）
+npx github:okamitimo233/ccg-workflow-modify
+
+# 全局安装
+npm install -g github:okamitimo233/ccg-workflow-modify#<分支名>
+```
+
+**关键要求**：
+- `dist/` 目录已从 `.gitignore` 移除，**必须随源码一起提交**，否则 GitHub 直装无法运行
+- 每次构建后必须 `git add dist/`，确保推送的仓库包含最新构建产物
+- 若后续配置了 npm registry，可额外执行 `npm publish --tag <alpha|latest>` 发布到 npm
 
 ### 检查清单
 - [ ] package.json 版本号已更新
@@ -346,8 +367,9 @@ git push origin main
 - [ ] README.md 已更新（命令表 + 使用说明 + 底部版本号）
 - [ ] CLAUDE.md 已更新（Last Updated + 变更记录 + 受影响章节）
 - [ ] `pnpm build` 通过
-- [ ] `npm publish` 成功
-- [ ] `git push origin main` 成功
+- [ ] `dist/` 已暂存（`git add dist/`）
+- [ ] `git push origin <分支>` 成功
+- [ ] 验证安装：`npx github:okamitimo233/ccg-workflow-modify#<分支>` 可正常运行
 
 ---
 
