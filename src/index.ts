@@ -9,6 +9,7 @@ export {
   writeCcgConfig,
   createDefaultConfig,
   createDefaultRouting,
+  migrateConfig,
   getCcgDir,
   getConfigPath,
 } from './utils/config'

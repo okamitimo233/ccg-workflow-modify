@@ -1,4 +1,4 @@
-import type { ModelRouting, ModelType } from '../types'
+import type { CliTool, ModelRouting, ModelType } from '../types'
 import ansis from 'ansis'
 import { exec } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -98,8 +98,10 @@ async function askReconfigureRouting(currentRouting?: ModelRouting): Promise<Mod
 
   if (currentRouting) {
     console.log(ansis.gray('当前配置:'))
-    console.log(`  ${ansis.cyan('前端模型:')} ${currentRouting.frontend.models.map(m => ansis.green(m)).join(', ')}`)
-    console.log(`  ${ansis.cyan('后端模型:')} ${currentRouting.backend.models.map(m => ansis.blue(m)).join(', ')}`)
+    const frontendLabel = currentRouting.frontend.cli_tool || currentRouting.frontend.models?.[0] || 'opencode'
+    const backendLabel = currentRouting.backend.cli_tool || currentRouting.backend.models?.[0] || 'codex'
+    console.log(`  ${ansis.cyan('前端工具:')} ${ansis.green(frontendLabel)}`)
+    console.log(`  ${ansis.cyan('后端工具:')} ${ansis.blue(backendLabel)}`)
     console.log()
   }
 
@@ -122,9 +124,9 @@ async function askReconfigureRouting(currentRouting?: ModelRouting): Promise<Mod
     name: 'selectedFrontend',
     message: i18n.t('init:selectFrontendModels'),
     choices: [
-      { name: 'Gemini', value: 'gemini' as ModelType, checked: currentRouting?.frontend.models.includes('gemini') ?? true },
-      { name: 'Claude', value: 'claude' as ModelType, checked: currentRouting?.frontend.models.includes('claude') ?? false },
-      { name: 'Codex', value: 'codex' as ModelType, checked: currentRouting?.frontend.models.includes('codex') ?? false },
+      { name: 'Gemini', value: 'gemini' as ModelType, checked: currentRouting?.frontend.models?.includes('gemini') ?? true },
+      { name: 'Claude', value: 'claude' as ModelType, checked: currentRouting?.frontend.models?.includes('claude') ?? false },
+      { name: 'Codex', value: 'codex' as ModelType, checked: currentRouting?.frontend.models?.includes('codex') ?? false },
     ],
     validate: (answer: string[]) => answer.length > 0 || i18n.t('init:validation.selectAtLeastOne'),
   }])
@@ -135,9 +137,9 @@ async function askReconfigureRouting(currentRouting?: ModelRouting): Promise<Mod
     name: 'selectedBackend',
     message: i18n.t('init:selectBackendModels'),
     choices: [
-      { name: 'Codex', value: 'codex' as ModelType, checked: currentRouting?.backend.models.includes('codex') ?? true },
-      { name: 'Gemini', value: 'gemini' as ModelType, checked: currentRouting?.backend.models.includes('gemini') ?? false },
-      { name: 'Claude', value: 'claude' as ModelType, checked: currentRouting?.backend.models.includes('claude') ?? false },
+      { name: 'Codex', value: 'codex' as ModelType, checked: currentRouting?.backend.models?.includes('codex') ?? true },
+      { name: 'Gemini', value: 'gemini' as ModelType, checked: currentRouting?.backend.models?.includes('gemini') ?? false },
+      { name: 'Claude', value: 'claude' as ModelType, checked: currentRouting?.backend.models?.includes('claude') ?? false },
     ],
     validate: (answer: string[]) => answer.length > 0 || i18n.t('init:validation.selectAtLeastOne'),
   }])
@@ -145,14 +147,22 @@ async function askReconfigureRouting(currentRouting?: ModelRouting): Promise<Mod
   const frontendModels = selectedFrontend as ModelType[]
   const backendModels = selectedBackend as ModelType[]
 
+  // 映射模型选择到 CLI 工具
+  const frontendCliTool: CliTool = frontendModels.includes('codex') ? 'codex' : 'opencode'
+  const backendCliTool: CliTool = backendModels.includes('codex') ? 'codex' : 'opencode'
+
   // Build new routing config
   const newRouting: ModelRouting = {
     frontend: {
+      cli_tool: frontendCliTool,
+      model_id: frontendCliTool === 'opencode' ? 'antigravity/gemini-3-pro-high' : '',
       models: frontendModels,
       primary: frontendModels[0],
       strategy: frontendModels.length > 1 ? 'parallel' : 'fallback',
     },
     backend: {
+      cli_tool: backendCliTool,
+      model_id: '',
       models: backendModels,
       primary: backendModels[0],
       strategy: backendModels.length > 1 ? 'parallel' : 'fallback',

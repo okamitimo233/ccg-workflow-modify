@@ -71,6 +71,8 @@
     "start": "node bin/ccg.mjs",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "pnpm build",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "eslint",
     "lint:fix": "eslint --fix"
   },
@@ -93,6 +95,7 @@
     "eslint": "^9.36.0",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
-    "unbuild": "^3.6.1"
+    "unbuild": "^3.6.1",
+    "vitest": "^4.0.18"
   }
 }
