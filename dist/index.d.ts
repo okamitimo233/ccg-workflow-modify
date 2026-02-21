@@ -13,24 +13,38 @@ interface CliOptions {
 }
 
 type SupportedLang = 'zh-CN' | 'en';
+/** @deprecated 使用 CliTool 替代 */
 type ModelType = 'codex' | 'gemini' | 'claude';
+type CliTool = 'codex' | 'gemini-cli' | 'opencode';
 type CollaborationMode = 'parallel' | 'smart' | 'sequential';
 type RoutingStrategy = 'parallel' | 'fallback' | 'round-robin';
+interface RoutingTarget {
+    cli_tool?: CliTool;
+    model_id?: string;
+    strategy: RoutingStrategy;
+    /** @deprecated 使用 cli_tool 替代 */
+    models?: ModelType[];
+    /** @deprecated 使用 cli_tool 替代 */
+    primary?: ModelType;
+}
+interface ReviewRouting {
+    strategy: 'parallel';
+    /** @deprecated 保留向后兼容 */
+    models?: ModelType[];
+}
+interface CliToolConfig {
+    enabled: boolean;
+    config_path: string;
+    instructions_path: string;
+    mcp_configured: boolean;
+}
+interface CliToolMcpConfig {
+    servers: string[];
+}
 interface ModelRouting {
-    frontend: {
-        models: ModelType[];
-        primary: ModelType;
-        strategy: RoutingStrategy;
-    };
-    backend: {
-        models: ModelType[];
-        primary: ModelType;
-        strategy: RoutingStrategy;
-    };
-    review: {
-        models: ModelType[];
-        strategy: 'parallel';
-    };
+    frontend: RoutingTarget;
+    backend: RoutingTarget;
+    review: ReviewRouting;
     mode: CollaborationMode;
 }
 interface CcgConfig {
@@ -40,6 +54,16 @@ interface CcgConfig {
         createdAt: string;
     };
     routing: ModelRouting;
+    cli_tools: {
+        codex: CliToolConfig;
+        'gemini-cli': CliToolConfig;
+        opencode: CliToolConfig;
+    };
+    cli_tools_mcp: {
+        codex: CliToolMcpConfig;
+        'gemini-cli': CliToolMcpConfig;
+        opencode: CliToolMcpConfig;
+    };
     workflows: {
         installed: string[];
     };
@@ -107,6 +131,7 @@ declare function changeLanguage(lang: SupportedLang): Promise<void>;
 
 declare function getCcgDir(): string;
 declare function getConfigPath(): string;
+declare function migrateConfig(raw: unknown): CcgConfig;
 declare function readCcgConfig(): Promise<CcgConfig | null>;
 declare function writeCcgConfig(config: CcgConfig): Promise<void>;
 declare function createDefaultConfig(options: {
@@ -222,5 +247,5 @@ declare function checkForUpdates(): Promise<{
     latestVersion: string | null;
 }>;
 
-export { changeLanguage, checkForUpdates, compareVersions, createDefaultConfig, createDefaultRouting, getCcgDir, getConfigPath, getCurrentVersion, getLatestVersion, getWorkflowById, getWorkflowConfigs, i18n, init, initI18n, installAceTool, installAceToolRs, installWorkflows, migrateToV1_4_0, needsMigration, readCcgConfig, showMainMenu, uninstallAceTool, uninstallWorkflows, update, writeCcgConfig };
-export type { AceToolConfig, CcgConfig, CliOptions, CollaborationMode, InitOptions, InstallResult, ModelRouting, ModelType, RoutingStrategy, SupportedLang, WorkflowConfig };
+export { changeLanguage, checkForUpdates, compareVersions, createDefaultConfig, createDefaultRouting, getCcgDir, getConfigPath, getCurrentVersion, getLatestVersion, getWorkflowById, getWorkflowConfigs, i18n, init, initI18n, installAceTool, installAceToolRs, installWorkflows, migrateConfig, migrateToV1_4_0, needsMigration, readCcgConfig, showMainMenu, uninstallAceTool, uninstallWorkflows, update, writeCcgConfig };
+export type { AceToolConfig, CcgConfig, CliOptions, CliTool, CliToolConfig, CliToolMcpConfig, CollaborationMode, InitOptions, InstallResult, ModelRouting, ModelType, ReviewRouting, RoutingStrategy, RoutingTarget, SupportedLang, WorkflowConfig };

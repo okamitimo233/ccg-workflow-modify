@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import cac from 'cac';
 import ansis from 'ansis';
-import { z as diagnoseMcpConfig, A as isWindows, B as readClaudeCodeConfig, C as fixWindowsMcpConfig, D as writeClaudeCodeConfig, t as readCcgConfig, n as initI18n, u as showMainMenu, m as init, E as configMcp, F as version, l as i18n } from './shared/ccg-workflow-modify.Veo9NcPe.mjs';
+import { A as diagnoseMcpConfig, B as isWindows, C as readClaudeCodeConfig, D as fixWindowsMcpConfig, E as writeClaudeCodeConfig, u as readCcgConfig, n as initI18n, v as showMainMenu, m as init, F as configMcp, G as version, l as i18n } from './shared/ccg-workflow-modify.CM0XzahC.mjs';
 import 'inquirer';
 import 'node:child_process';
 import 'node:util';
