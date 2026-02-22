@@ -9,6 +9,7 @@ import { i18n } from '../i18n'
 import { createDefaultConfig, ensureCcgDir, getCcgDir, readCcgConfig, writeCcgConfig } from '../utils/config'
 import { getAllCommandIds, installAceTool, installAceToolRs, installContextWeaver, installWorkflows } from '../utils/installer'
 import { migrateToV1_4_0, needsMigration } from '../utils/migration'
+import { promptRoutingConfig } from '../utils/routing-prompt'
 
 export async function init(options: InitOptions = {}): Promise<void> {
   console.log()
@@ -170,6 +171,29 @@ export async function init(options: InitOptions = {}): Promise<void> {
     }
   }
 
+  // CLI Tool Selection (Progressive Disclosure)
+  let customRouting: ModelRouting | null = null
+  if (!options.skipPrompt) {
+    console.log()
+    console.log(ansis.cyan.bold(`  🔧 CLI 工具配置`))
+    console.log()
+    const { advancedConfig } = await inquirer.prompt([{
+      type: 'confirm',
+      name: 'advancedConfig',
+      message: `自定义 CLI 工具？${ansis.gray('(默认: opencode + codex)')}`,
+      default: false,
+    }])
+    if (advancedConfig) {
+      const result = await promptRoutingConfig()
+      customRouting = {
+        frontend: { ...result.frontend, strategy: 'parallel' },
+        backend: { ...result.backend, strategy: 'parallel' },
+        review: { strategy: 'parallel' },
+        mode,
+      }
+    }
+  }
+
   // Claude Code API configuration
   let apiUrl = ''
   let apiKey = ''
@@ -231,8 +255,8 @@ export async function init(options: InitOptions = {}): Promise<void> {
     }
   }
 
-  // Build routing config — 直接使用新格式 (M3: 不再构建旧格式字段)
-  const routing: ModelRouting = {
+  // Build routing config — Progressive Disclosure: 使用用户选择或默认值
+  const routing: ModelRouting = customRouting || {
     frontend: {
       cli_tool: 'opencode',
       model_id: 'antigravity/gemini-3-pro-high',
@@ -254,7 +278,9 @@ export async function init(options: InitOptions = {}): Promise<void> {
   console.log(ansis.yellow('━'.repeat(50)))
   console.log(ansis.bold(`  ${i18n.t('init:summary.title')}`))
   console.log()
-  console.log(`  ${ansis.cyan('模型路由')}  ${ansis.green('Gemini')} (前端) + ${ansis.blue('Codex')} (后端)`)
+  const frontendName = routing.frontend.cli_tool === 'opencode' ? 'Gemini' : routing.frontend.cli_tool === 'gemini-cli' ? 'Gemini CLI' : 'Codex'
+  const backendName = routing.backend.cli_tool === 'codex' ? 'Codex' : routing.backend.cli_tool === 'opencode' ? 'opencode' : 'Gemini CLI'
+  console.log(`  ${ansis.cyan('模型路由')}  ${ansis.green(frontendName)} (前端) + ${ansis.blue(backendName)} (后端)`)
   console.log(`  ${ansis.cyan('命令数量')}  ${ansis.yellow(selectedWorkflows.length.toString())} 个`)
   console.log(`  ${ansis.cyan('MCP 工具')}  ${(mcpProvider === 'ace-tool' || mcpProvider === 'ace-tool-rs') ? (aceToolToken ? ansis.green(mcpProvider) : ansis.yellow(`${mcpProvider} (待配置)`)) : ansis.gray('跳过')}`)
   console.log(`  ${ansis.cyan('Web UI')}    ${liteMode ? ansis.gray('禁用') : ansis.green('启用')}`)
@@ -332,6 +358,8 @@ export async function init(options: InitOptions = {}): Promise<void> {
       routing,
       liteMode,
       mcpProvider,
+      cli_tools: config.cli_tools,
+      cli_tools_mcp: config.cli_tools_mcp,
     })
 
     // Install ace-tool or ace-tool-rs MCP if token was provided
@@ -391,25 +419,30 @@ export async function init(options: InitOptions = {}): Promise<void> {
       spinner.succeed(ansis.green(i18n.t('init:installSuccess')))
     }
 
-    // Save API configuration if provided
-    if (apiUrl && apiKey) {
+    // settings.json: API 配置（可选）+ 权限白名单（始终写入）
+    {
       const settingsPath = join(installDir, 'settings.json')
       let settings: Record<string, any> = {}
       if (await fs.pathExists(settingsPath)) {
         settings = await fs.readJSON(settingsPath)
       }
-      if (!settings.env)
-        settings.env = {}
-      settings.env.ANTHROPIC_BASE_URL = apiUrl
-      settings.env.ANTHROPIC_API_KEY = apiKey
-      delete settings.env.ANTHROPIC_AUTH_TOKEN // 避免冲突
-      // 默认优化配置
-      settings.env.DISABLE_TELEMETRY = '1'
-      settings.env.DISABLE_ERROR_REPORTING = '1'
-      settings.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1'
-      settings.env.CLAUDE_CODE_ATTRIBUTION_HEADER = '0'
-      settings.env.MCP_TIMEOUT = '60000'
-      // codeagent-wrapper 权限白名单
+
+      // API 配置（仅在用户提供时写入）
+      if (apiUrl && apiKey) {
+        if (!settings.env)
+          settings.env = {}
+        settings.env.ANTHROPIC_BASE_URL = apiUrl
+        settings.env.ANTHROPIC_API_KEY = apiKey
+        delete settings.env.ANTHROPIC_AUTH_TOKEN // 避免冲突
+        // 默认优化配置
+        settings.env.DISABLE_TELEMETRY = '1'
+        settings.env.DISABLE_ERROR_REPORTING = '1'
+        settings.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1'
+        settings.env.CLAUDE_CODE_ATTRIBUTION_HEADER = '0'
+        settings.env.MCP_TIMEOUT = '60000'
+      }
+
+      // codeagent-wrapper 权限白名单（始终写入，不依赖 API 配置）
       if (!settings.permissions)
         settings.permissions = {}
       if (!settings.permissions.allow)
@@ -417,14 +450,19 @@ export async function init(options: InitOptions = {}): Promise<void> {
       const wrapperPerms = [
         'Bash(~/.claude/bin/codeagent-wrapper --backend gemini*)',
         'Bash(~/.claude/bin/codeagent-wrapper --backend codex*)',
+        'Bash(~/.claude/bin/codeagent-wrapper --backend opencode*)',
       ]
       for (const perm of wrapperPerms) {
         if (!settings.permissions.allow.includes(perm))
           settings.permissions.allow.push(perm)
       }
+
       await fs.writeJSON(settingsPath, settings, { spaces: 2 })
-      console.log()
-      console.log(`    ${ansis.green('✓')} API 配置 ${ansis.gray(`→ ${settingsPath}`)}`)
+
+      if (apiUrl && apiKey) {
+        console.log()
+        console.log(`    ${ansis.green('✓')} API 配置 ${ansis.gray(`→ ${settingsPath}`)}`)
+      }
     }
 
     // Show result summary
