@@ -8,10 +8,15 @@ import { dirname, join } from 'pathe'
 import fs from 'fs-extra'
 import { configMcp } from './config-mcp'
 import { i18n } from '../i18n'
-import { uninstallWorkflows } from '../utils/installer'
+import { getAllCommandIds, installWorkflows, uninstallWorkflows } from '../utils/installer'
 import { init } from './init'
 import { update } from './update'
 import { isWindows } from '../utils/platform'
+import { readCcgConfig, writeCcgConfig } from '../utils/config'
+import { readClaudeCodeConfig } from '../utils/mcp'
+import { promptRoutingConfig } from '../utils/routing-prompt'
+import { syncMcpToTool } from '../utils/external-cli-mcp'
+import { installInstructions } from '../utils/instructions'
 
 const execAsync = promisify(exec)
 
@@ -32,6 +37,7 @@ export async function showMainMenu(): Promise<void> {
         { name: `${ansis.cyan('⚙')} 配置 MCP`, value: 'config-mcp' },
         { name: `${ansis.cyan('🔑')} 配置 API`, value: 'config-api' },
         { name: `${ansis.magenta('🎭')} 配置输出风格`, value: 'config-style' },
+        { name: `${ansis.cyan('🔧')} 工具链配置`, value: 'toolchain' },
         { name: `${ansis.yellow('🔧')} 实用工具`, value: 'tools' },
         { name: `${ansis.blue('📦')} 安装 Claude Code`, value: 'install-claude' },
         { name: `${ansis.magenta('➜')} ${i18n.t('menu:options.uninstall')}`, value: 'uninstall' },
@@ -56,6 +62,9 @@ export async function showMainMenu(): Promise<void> {
         break
       case 'config-style':
         await configOutputStyle()
+        break
+      case 'toolchain':
+        await handleToolchain()
         break
       case 'tools':
         await handleTools()
@@ -204,6 +213,7 @@ async function configApi(): Promise<void> {
   const wrapperPerms = [
     'Bash(~/.claude/bin/codeagent-wrapper --backend gemini*)',
     'Bash(~/.claude/bin/codeagent-wrapper --backend codex*)',
+    'Bash(~/.claude/bin/codeagent-wrapper --backend opencode*)',
   ]
   for (const perm of wrapperPerms) {
     if (!settings.permissions.allow.includes(perm))
@@ -498,6 +508,186 @@ async function uninstall(): Promise<void> {
   }
 
   console.log()
+}
+
+// ============ 工具链配置 ============
+
+async function handleToolchain(): Promise<void> {
+  const { action } = await inquirer.prompt([{
+    type: 'list',
+    name: 'action',
+    message: '工具链配置',
+    choices: [
+      { name: `${ansis.green('➜')} 配置前端/后端 CLI 工具`, value: 'cli-tools' },
+      { name: `${ansis.blue('➜')} 同步 MCP 到外部 CLI`, value: 'sync-mcp' },
+      new inquirer.Separator(),
+      { name: `${ansis.gray('返回')}`, value: 'cancel' },
+    ],
+  }])
+  if (action === 'cli-tools') await configCliTools()
+  else if (action === 'sync-mcp') await syncExternalMcp()
+}
+
+async function configCliTools(): Promise<void> {
+  console.log()
+  console.log(ansis.cyan.bold('  配置前端/后端 CLI 工具'))
+  console.log()
+
+  const config = await readCcgConfig()
+  if (!config) {
+    console.log(ansis.yellow('⚠ 未检测到 CCG 配置，请先运行初始化'))
+    return
+  }
+
+  // 显示当前配置
+  console.log(ansis.gray('  当前配置:'))
+  console.log(`    ${ansis.cyan('前端:')} ${ansis.green(config.routing.frontend.cli_tool)} (${config.routing.frontend.model_id || '默认'})`)
+  console.log(`    ${ansis.cyan('后端:')} ${ansis.blue(config.routing.backend.cli_tool)} (${config.routing.backend.model_id || '默认'})`)
+  console.log()
+
+  const result = await promptRoutingConfig({
+    frontend: config.routing.frontend,
+    backend: config.routing.backend,
+  })
+
+  // 更新 routing
+  config.routing.frontend.cli_tool = result.frontend.cli_tool
+  config.routing.frontend.model_id = result.frontend.model_id
+  config.routing.backend.cli_tool = result.backend.cli_tool
+  config.routing.backend.model_id = result.backend.model_id
+
+  await writeCcgConfig(config)
+
+  // 重新安装工作流模板
+  const installDir = join(homedir(), '.claude')
+  await installWorkflows(getAllCommandIds(), installDir, true, {
+    routing: config.routing,
+    liteMode: config.performance?.liteMode,
+    mcpProvider: config.mcp.provider,
+    cli_tools: config.cli_tools,
+    cli_tools_mcp: config.cli_tools_mcp,
+  })
+
+  console.log()
+  console.log(ansis.green('✓ CLI 工具配置已更新'))
+  console.log(ansis.gray('  工作流模板已重新安装'))
+}
+
+async function syncExternalMcp(): Promise<void> {
+  console.log()
+  console.log(ansis.cyan.bold('  同步 MCP 到外部 CLI'))
+  console.log()
+
+  // 读取 Claude Code MCP 配置
+  const claudeConfig = await readClaudeCodeConfig()
+  if (!claudeConfig?.mcpServers || Object.keys(claudeConfig.mcpServers).length === 0) {
+    console.log(ansis.yellow('⚠ 未检测到 MCP 配置（~/.claude.json 中无 mcpServers）'))
+    return
+  }
+
+  const serverNames = Object.keys(claudeConfig.mcpServers)
+
+  // 选择目标工具
+  const { targetTools } = await inquirer.prompt([{
+    type: 'checkbox',
+    name: 'targetTools',
+    message: '选择目标 CLI 工具',
+    choices: [
+      { name: `codex ${ansis.gray('(~/.codex/config.toml)')}`, value: 'codex' },
+      { name: `gemini-cli ${ansis.gray('(~/.gemini/settings.json)')}`, value: 'gemini-cli' },
+      { name: `opencode ${ansis.gray('(~/.opencode.json)')}`, value: 'opencode' },
+    ],
+    validate: (input: string[]) => input.length > 0 || '请至少选择一个工具',
+  }])
+
+  // 选择要同步的 MCP server
+  const { selectedServers } = await inquirer.prompt([{
+    type: 'checkbox',
+    name: 'selectedServers',
+    message: '选择要同步的 MCP 服务',
+    choices: serverNames.map(name => ({
+      name: `${name} ${ansis.gray(`(${claudeConfig.mcpServers![name].command || claudeConfig.mcpServers![name].url || 'unknown'})`)}`,
+      value: name,
+    })),
+    validate: (input: string[]) => input.length > 0 || '请至少选择一个服务',
+  }])
+
+  // 构建待同步的 servers
+  const serversToSync: Record<string, any> = {}
+  for (const name of selectedServers) {
+    serversToSync[name] = claudeConfig.mcpServers![name]
+  }
+
+  // 执行同步
+  let totalSuccess = 0
+  let totalFailed = 0
+
+  // 追踪每个工具成功同步的 server 名称
+  const successByTool: Record<string, string[]> = {}
+
+  for (const tool of targetTools) {
+    console.log()
+    console.log(ansis.cyan(`  → 同步到 ${tool}...`))
+    successByTool[tool] = []
+    const results = await syncMcpToTool(tool, serversToSync)
+    for (const r of results) {
+      if (r.success) {
+        totalSuccess++
+        successByTool[tool].push(r.message.match(/'([^']+)'/)?.[1] || '')
+        console.log(`    ${ansis.green('✓')} ${r.message}`)
+        if (r.backedUp) {
+          console.log(`      ${ansis.gray(`备份: ${r.backedUp}`)}`)
+        }
+      }
+      else {
+        totalFailed++
+        console.log(`    ${ansis.red('✗')} ${r.message}`)
+      }
+    }
+  }
+
+  // 更新 config.toml — 仅持久化成功同步的 server
+  const config = await readCcgConfig()
+  if (config) {
+    for (const tool of targetTools) {
+      const toolKey = tool as 'codex' | 'gemini-cli' | 'opencode'
+      const succeededServers = successByTool[tool].filter(Boolean)
+      if (succeededServers.length > 0) {
+        config.cli_tools_mcp[toolKey].servers = [
+          ...new Set([...config.cli_tools_mcp[toolKey].servers, ...succeededServers]),
+        ]
+        config.cli_tools[toolKey].mcp_configured = true
+      }
+    }
+    await writeCcgConfig(config)
+
+    // Eager trigger: 重新生成指令文件以包含新同步的 MCP 指引
+    try {
+      const instrResult = await installInstructions({
+        cli_tools: config.cli_tools,
+        cli_tools_mcp: config.cli_tools_mcp,
+      })
+      if (instrResult.written.length > 0) {
+        console.log(ansis.green(`  ✓ 指令文件已更新（${instrResult.written.map(w => w.tool).join(', ')}）`))
+      }
+      if (instrResult.warnings.length > 0) {
+        for (const warn of instrResult.warnings) {
+          console.log(ansis.yellow(`  ⚠ ${warn}`))
+        }
+      }
+      if (instrResult.errors.length > 0) {
+        for (const err of instrResult.errors) {
+          console.log(ansis.yellow(`  ⚠ ${err}`))
+        }
+      }
+    }
+    catch (err) {
+      console.log(ansis.yellow(`  ⚠ 指令文件更新失败: ${err instanceof Error ? err.message : err}`))
+    }
+  }
+
+  console.log()
+  console.log(ansis.green(`✓ 同步完成：${totalSuccess} 成功` + (totalFailed > 0 ? `，${totalFailed} 失败` : '')))
 }
 
 // ============ 实用工具 ============

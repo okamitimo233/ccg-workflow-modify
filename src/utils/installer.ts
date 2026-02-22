@@ -1,9 +1,10 @@
-import type { AceToolConfig, CliTool, InstallResult, WorkflowConfig } from '../types'
+import type { AceToolConfig, CcgConfig, CliTool, InstallResult, WorkflowConfig } from '../types'
 import { homedir } from 'node:os'
 import fs from 'fs-extra'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'pathe'
 import { backupClaudeCodeConfig, buildMcpServerConfig, fixWindowsMcpConfig, mergeMcpServers, readClaudeCodeConfig, writeClaudeCodeConfig } from './mcp'
+import { installInstructions } from './instructions'
 import { isWindows } from './platform'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -378,10 +379,29 @@ export function getWorkflowPreset(preset: WorkflowPreset): string[] {
   return [...WORKFLOW_PRESETS[preset].workflows]
 }
 
+/** CliTool → wrapper --backend 参数名映射 */
+const CLI_TOOL_TO_BACKEND: Record<CliTool, string> = {
+  'codex': 'codex',
+  'gemini-cli': 'gemini',
+  'opencode': 'opencode',
+}
+
 /**
- * Replace template variables in content based on user configuration
- * This injects model routing configs at install time
- * Note: MCP tool names are now hardcoded to ace-tool in templates
+ * Build execution flags for codeagent-wrapper from CliTool + model_id.
+ * Always ends with trailing space for template concatenation.
+ */
+function buildExecFlags(cliTool: CliTool, modelId: string): string {
+  let flags = `--backend ${CLI_TOOL_TO_BACKEND[cliTool]} `
+  const trimmedModel = modelId.trim()
+  if (trimmedModel) {
+    flags += `--model ${trimmedModel} `
+  }
+  return flags
+}
+
+/**
+ * Replace template variables in content based on user configuration.
+ * Injects model routing configs at install time.
  */
 function injectConfigVariables(content: string, config: {
   routing?: {
@@ -398,44 +418,75 @@ function injectConfigVariables(content: string, config: {
   // Model routing injection
   const routing = config.routing || {}
 
-  // Frontend — 从 cli_tool 推导 legacy model name（仅用于模板注入）
-  const frontendCliTool = routing.frontend?.cli_tool || 'opencode'
-  const frontendPrimary = frontendCliTool === 'codex' ? 'codex' : 'gemini'
-  const frontendModels = [frontendPrimary]
-  processed = processed.replace(/\{\{FRONTEND_MODELS\}\}/g, JSON.stringify(frontendModels))
-  processed = processed.replace(/\{\{FRONTEND_PRIMARY\}\}/g, frontendPrimary)
+  // New placeholder system: CliTool + model_id → exec flags
+  const frontendCliTool: CliTool = routing.frontend?.cli_tool || 'opencode'
+  const frontendModelId = routing.frontend?.model_id || ''
+  const backendCliTool: CliTool = routing.backend?.cli_tool || 'codex'
+  const backendModelId = routing.backend?.model_id || ''
 
-  // Backend — 同理
-  const backendCliTool = routing.backend?.cli_tool || 'codex'
-  const backendPrimary = backendCliTool === 'codex' ? 'codex' : 'gemini'
-  const backendModels = [backendPrimary]
-  processed = processed.replace(/\{\{BACKEND_MODELS\}\}/g, JSON.stringify(backendModels))
-  processed = processed.replace(/\{\{BACKEND_PRIMARY\}\}/g, backendPrimary)
+  const frontendExecFlags = buildExecFlags(frontendCliTool, frontendModelId)
+  const backendExecFlags = buildExecFlags(backendCliTool, backendModelId)
 
-  // Review — 从 frontend/backend 推导
-  const reviewModels = [...new Set([frontendPrimary, backendPrimary])]
-  processed = processed.replace(/\{\{REVIEW_MODELS\}\}/g, JSON.stringify(reviewModels))
-
-  // Routing mode
-  const routingMode = routing.mode || 'smart'
-  processed = processed.replace(/\{\{ROUTING_MODE\}\}/g, routingMode)
+  // Use callback replacer to prevent $-sequence injection from model IDs
+  processed = processed.replace(/\{\{FRONTEND_EXEC_FLAGS\}\}/g, () => frontendExecFlags)
+  processed = processed.replace(/\{\{BACKEND_EXEC_FLAGS\}\}/g, () => backendExecFlags)
+  processed = processed.replace(/\{\{FRONTEND_CLI_TOOL\}\}/g, () => frontendCliTool)
+  processed = processed.replace(/\{\{BACKEND_CLI_TOOL\}\}/g, () => backendCliTool)
 
   // Lite mode flag for codeagent-wrapper
-  // If liteMode is true, inject "--lite" flag
   const liteModeFlag = config.liteMode ? '--lite ' : ''
   processed = processed.replace(/\{\{LITE_MODE_FLAG\}\}/g, liteModeFlag)
+
+  // Context management placeholders (MUST be BEFORE MCP_SEARCH_TOOL for nested resolution)
+  const CONTEXT_STRATEGY = [
+    '**检索优先级**：',
+    '1. `{{MCP_SEARCH_TOOL}}` — 语义检索相关代码（首选）',
+    '2. Grep — 已知标识符/字符串精确定位行号',
+    '3. `Read({ file_path, offset, limit })` — 只读目标区域（禁止全文件 Read，除非 <100 行）',
+    '4. Glob — 不确定文件位置时按模式查找',
+    '',
+    '**禁止**：单次读取 >3 个文件全文 | 基于假设生成代码，必须先检索',
+  ].join('\n')
+
+  const CONTEXT_RULES = [
+    'CONTEXT_RULES:',
+    '- 优先 MCP 语义检索，而非 Read 全文件',
+    '- Read 时必须指定 offset + limit，只读目标函数/类',
+    '- 单次任务上下文 ≤2000 行；超出时分块处理并汇总，输出已审范围+未审风险',
+    '- 输出定位格式：文件路径:行号 + 关键符号名 + 最小代码片段',
+  ].join('\n')
+
+  const CONTEXT_CONSTRAINTS = [
+    '- **上下文管理**：优先 MCP 语义检索 > Grep 定位 > Read 局部读取（禁止 Read 全文件，除非 <100 行）',
+    '- **上下文预算**：单次任务代码上下文 ≤2000 行；超出时分块处理并汇总',
+    '- **输出定位**：使用 `文件路径:行号` 格式引用代码位置',
+  ].join('\n')
+
+  processed = processed.replace(/\{\{CONTEXT_STRATEGY\}\}/g, CONTEXT_STRATEGY)
+  processed = processed.replace(/\{\{CONTEXT_RULES\}\}/g, CONTEXT_RULES)
+  processed = processed.replace(/\{\{CONTEXT_CONSTRAINTS\}\}/g, CONTEXT_CONSTRAINTS)
 
   // MCP tool injection based on provider
   const mcpProvider = config.mcpProvider || 'ace-tool'
   if (mcpProvider === 'contextweaver') {
-    // ContextWeaver MCP tools
     processed = processed.replace(/\{\{MCP_SEARCH_TOOL\}\}/g, 'mcp__contextweaver__codebase-retrieval')
     processed = processed.replace(/\{\{MCP_SEARCH_PARAM\}\}/g, 'information_request')
   }
   else {
-    // ace-tool / ace-tool-rs MCP tools (default)
     processed = processed.replace(/\{\{MCP_SEARCH_TOOL\}\}/g, 'mcp__ace-tool__search_context')
     processed = processed.replace(/\{\{MCP_SEARCH_PARAM\}\}/g, 'query')
+  }
+
+  // Post-injection unresolved placeholder detection
+  const RUNTIME_ALLOWLIST = new Set(['WORKDIR'])
+  const unresolvedMatch = processed.match(/\{\{([A-Z][A-Z0-9_]*)\}\}/g)
+  if (unresolvedMatch) {
+    const unresolved = unresolvedMatch
+      .map(m => m.slice(2, -2))
+      .filter(name => !RUNTIME_ALLOWLIST.has(name))
+    if (unresolved.length > 0) {
+      throw new Error(`Unresolved template placeholders: ${unresolved.join(', ')}`)
+    }
   }
 
   return processed
@@ -532,6 +583,8 @@ export async function installWorkflows(
     }
     liteMode?: boolean
     mcpProvider?: string
+    cli_tools?: CcgConfig['cli_tools']
+    cli_tools_mcp?: CcgConfig['cli_tools_mcp']
   },
 ): Promise<InstallResult> {
   // Default config
@@ -654,8 +707,9 @@ ${workflow.description}
               const srcFile = join(srcModelDir, file)
               const destFile = join(destModelDir, file)
               if (force || !(await fs.pathExists(destFile))) {
-                // Read template content, replace ~ paths, then write
-                const templateContent = await fs.readFile(srcFile, 'utf-8')
+                // Read template content, inject config variables, replace ~ paths, then write
+                let templateContent = await fs.readFile(srcFile, 'utf-8')
+                templateContent = injectConfigVariables(templateContent, installConfig)
                 const processedContent = replaceHomePathsInTemplate(templateContent, installDir)
                 await fs.writeFile(destFile, processedContent, 'utf-8')
                 result.installedPrompts.push(`${model}/${file.replace('.md', '')}`)
@@ -758,6 +812,21 @@ ${workflow.description}
   catch (error) {
     result.errors.push(`Failed to install codeagent-wrapper: ${error}`)
     result.success = false
+  }
+
+  // Install instruction files for external CLI tools (Phase 4)
+  if (config?.cli_tools) {
+    const instrResult = await installInstructions({
+      cli_tools: config.cli_tools,
+      cli_tools_mcp: config.cli_tools_mcp,
+    })
+    if (instrResult.errors.length > 0) {
+      result.errors.push(...instrResult.errors)
+    }
+    // Warnings are non-fatal: log but don't add to errors
+    for (const w of instrResult.warnings) {
+      result.errors.push(`[instructions:warn] ${w}`)
+    }
   }
 
   result.configPath = commandsDir
