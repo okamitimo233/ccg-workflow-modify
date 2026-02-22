@@ -238,4 +238,4 @@ MIT
 
 ---
 
-v1.7.60 | [Issues](https://github.com/fengshao1227/ccg-workflow-modify/issues)
+v2.0.0-beta.1 | [Issues](https://github.com/fengshao1227/ccg-workflow-modify/issues)

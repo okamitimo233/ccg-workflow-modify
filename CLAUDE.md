@@ -2,13 +2,20 @@
 
 > [根目录](../CLAUDE.md) > **skills-v2**
 
-**Last Updated**: 2026-02-21 (v1.7.61)
+**Last Updated**: 2026-02-22 (v2.0.0-beta.1)
 
 ---
 
 ## 变更记录 (Changelog)
 
 > 完整变更历史请查看 [CHANGELOG.md](./CHANGELOG.md)
+
+### 2026-02-22 (v2.0.0-beta.1)
+- 🏗️ **重构**：类型系统重构，新增 `CliTool` 枚举和路由配置类型
+- 🐛 **修复**：`atomicWriteFile()` Windows rename 重试 + EPERM/EBUSY 错误处理
+- 🐛 **修复**：`permissions.allow` 白名单脱离 API 配置条件，始终写入
+- ✨ **新增**：`instructions/` 模板 + MCP 引导注入 + 输出风格配置
+- ✅ **验证**：Phase 0-8 全量回归/验收测试通过（39/46 tasks）
 
 ### 2026-02-10 (v1.7.61)
 - 🐛 **修复**：`package.json` files 白名单补全 team 系列模板
@@ -374,4 +381,4 @@ npm install -g github:okamitimo233/ccg-workflow-modify#<分支名>
 ---
 
 **扫描覆盖率**: 95%+
-**最后更新**: 2026-02-21
+**最后更新**: 2026-02-22

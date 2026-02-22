@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0-beta.1] - 2026-02-22
+
+### 🏗️ 重构完成：多 CLI 工具架构
+
+Phase 0-6 重构全面验收通过，从 alpha 升级到 beta。
+
+#### ✨ 新功能
+
+- **指令文件系统**（Phase 4）：为 Codex/Gemini CLI/opencode 自动生成专属指令文件
+- **渐进式上下文**（Phase 5）：18 个命令模板 + 13 个角色提示词内置上下文管理策略
+- **MCP 指引系统**（Phase 6）：6 个 MCP 工具指引模板，按配置条件注入指令文件
+- **外部 CLI MCP 同步**（Phase 2）：菜单支持将 Claude Code MCP 配置同步到 Codex/Gemini CLI/opencode
+- **CLI 工具路由**（Phase 3）：`FRONTEND_EXEC_FLAGS`/`BACKEND_EXEC_FLAGS` 占位符系统替代旧的 `GEMINI_MODEL_FLAG`
+
+#### 🐛 修复
+
+- **Windows 原子写入**：`atomicWriteFile()` 新增 rename 重试（3 次/100ms）+ EPERM/EBUSY/EACCES/EXDEV 错误码白名单 + fallback 直接写入 + `.tmp` 清理
+- **权限白名单**：`settings.json` 的 `permissions.allow` 始终写入（不再依赖 API 配置）
+
+#### 🔄 变更
+
+- 版本号从 `2.0.0-alpha.1` 升级到 `2.0.0-beta.1`
+- 清除所有旧占位符残留：`GEMINI_MODEL_FLAG`/`FRONTEND_MODELS`/`FRONTEND_PRIMARY`/`BACKEND_MODELS`/`BACKEND_PRIMARY`
+
+#### 🧪 验收
+
+- Phase 0-8 共 39 项验收条件全部通过
+- 30 tests / 2 test files 通过
+- TypeScript 类型检查通过
+- `pnpm build` 通过
+
+---
+
 ## [2.0.0-alpha.1] - 2026-02-22 ⚡ BREAKING CHANGES
 
 ### 🏗️ 重构：配置类型系统
