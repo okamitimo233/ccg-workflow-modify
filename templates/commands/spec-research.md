@@ -39,6 +39,10 @@ description: '需求 → 约束集（并行探索 + OPSX 提案）'
    - Determine project scale: single vs multi-directory structure.
    - **Decision**: If multi-directory → enable parallel Explore subagents.
 
+   #### 上下文检索策略
+
+   {{CONTEXT_STRATEGY}}
+
 3. **Define Exploration Boundaries (Context-Based)**
    - Identify natural context boundaries (NOT functional roles):
      * Subagent 1: User domain code (models, services, UI)

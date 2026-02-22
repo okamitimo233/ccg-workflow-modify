@@ -29,22 +29,19 @@ description: '后端专项工作流（研究→构思→计划→执行→优化
 
 ## 多模型调用规范
 
-**工作目录**：
-- `{{WORKDIR}}`：替换为目标工作目录的**绝对路径**
-- 如果用户通过 `/add-dir` 添加了多个工作区，先用 Glob/Grep 确定任务相关的工作区
-- 如果无法确定，用 `AskUserQuestion` 询问用户选择目标工作区
-- 默认使用当前工作目录
+**工作目录**：`{{WORKDIR}}` — 多工作区时用 Glob/Grep 确认，不确定则 `AskUserQuestion`。
 
 **调用语法**：
 
 ```
 # 新会话调用
 Bash({
-  command: "~/.claude/bin/codeagent-wrapper {{LITE_MODE_FLAG}}--backend codex - \"{{WORKDIR}}\" <<'EOF'
+  command: "~/.claude/bin/codeagent-wrapper {{LITE_MODE_FLAG}}{{BACKEND_EXEC_FLAGS}}- \"{{WORKDIR}}\" <<'EOF'
 ROLE_FILE: <角色提示词路径>
 <TASK>
 需求：<增强后的需求（如未增强则用 $ARGUMENTS）>
 上下文：<前序阶段收集的项目上下文、分析结果等>
+{{CONTEXT_RULES}}
 </TASK>
 OUTPUT: 期望输出格式
 EOF",
@@ -55,11 +52,12 @@ EOF",
 
 # 复用会话调用
 Bash({
-  command: "~/.claude/bin/codeagent-wrapper {{LITE_MODE_FLAG}}--backend codex resume <SESSION_ID> - \"{{WORKDIR}}\" <<'EOF'
+  command: "~/.claude/bin/codeagent-wrapper {{LITE_MODE_FLAG}}{{BACKEND_EXEC_FLAGS}}resume <SESSION_ID> - \"{{WORKDIR}}\" <<'EOF'
 ROLE_FILE: <角色提示词路径>
 <TASK>
 需求：<增强后的需求（如未增强则用 $ARGUMENTS）>
 上下文：<前序阶段收集的项目上下文、分析结果等>
+{{CONTEXT_RULES}}
 </TASK>
 OUTPUT: 期望输出格式
 EOF",
@@ -98,6 +96,10 @@ EOF",
 ### 🔍 阶段 1：研究
 
 `[模式：研究]` - 理解需求并收集上下文
+
+#### 上下文检索策略
+
+{{CONTEXT_STRATEGY}}
 
 1. **代码检索**（如 ace-tool MCP 可用）：调用 `{{MCP_SEARCH_TOOL}}` 检索现有 API、数据模型、服务架构
 2. 需求完整性评分（0-10 分）：≥7 继续，<7 停止补充

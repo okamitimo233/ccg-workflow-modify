@@ -32,22 +32,19 @@ description: '多模型协作开发工作流（研究→构思→计划→执行
 
 ## 多模型调用规范
 
-**工作目录**：
-- `{{WORKDIR}}`：替换为目标工作目录的**绝对路径**
-- 如果用户通过 `/add-dir` 添加了多个工作区，先用 Glob/Grep 确定任务相关的工作区
-- 如果无法确定，用 `AskUserQuestion` 询问用户选择目标工作区
-- 默认使用当前工作目录
+**工作目录**：`{{WORKDIR}}` — 多工作区时用 Glob/Grep 确认，不确定则 `AskUserQuestion`。
 
-**调用语法**（并行用 `run_in_background: true`，串行用 `false`）：
+**调用语法**（后端用 `{{BACKEND_EXEC_FLAGS}}`，前端用 `{{FRONTEND_EXEC_FLAGS}}`）：
 
 ```
 # 新会话调用
 Bash({
-  command: "~/.claude/bin/codeagent-wrapper {{LITE_MODE_FLAG}}--backend <codex|gemini> {{GEMINI_MODEL_FLAG}}- \"{{WORKDIR}}\" <<'EOF'
+  command: "~/.claude/bin/codeagent-wrapper {{LITE_MODE_FLAG}}{{BACKEND_EXEC_FLAGS}}- \"{{WORKDIR}}\" <<'EOF'
 ROLE_FILE: <角色提示词路径>
 <TASK>
 需求：<增强后的需求（如未增强则用 $ARGUMENTS）>
 上下文：<前序阶段收集的项目上下文、分析结果等>
+{{CONTEXT_RULES}}
 </TASK>
 OUTPUT: 期望输出格式
 EOF",
@@ -58,11 +55,12 @@ EOF",
 
 # 复用会话调用
 Bash({
-  command: "~/.claude/bin/codeagent-wrapper {{LITE_MODE_FLAG}}--backend <codex|gemini> {{GEMINI_MODEL_FLAG}}resume <SESSION_ID> - \"{{WORKDIR}}\" <<'EOF'
+  command: "~/.claude/bin/codeagent-wrapper {{LITE_MODE_FLAG}}{{BACKEND_EXEC_FLAGS}}resume <SESSION_ID> - \"{{WORKDIR}}\" <<'EOF'
 ROLE_FILE: <角色提示词路径>
 <TASK>
 需求：<增强后的需求（如未增强则用 $ARGUMENTS）>
 上下文：<前序阶段收集的项目上下文、分析结果等>
+{{CONTEXT_RULES}}
 </TASK>
 OUTPUT: 期望输出格式
 EOF",
@@ -71,9 +69,6 @@ EOF",
   description: "简短描述"
 })
 ```
-
-**模型参数说明**：
-- `{{GEMINI_MODEL_FLAG}}`：当使用 `--backend gemini` 时，替换为 `--gemini-model gemini-3-pro-preview `（注意末尾空格）；使用 codex 时替换为空字符串
 
 **角色提示词**：
 
@@ -85,18 +80,9 @@ EOF",
 
 **会话复用**：每次调用返回 `SESSION_ID: xxx`，后续阶段用 `resume xxx` 子命令复用上下文（注意：是 `resume`，不是 `--resume`）。
 
-**并行调用**：使用 `run_in_background: true` 启动，用 `TaskOutput` 等待结果。**必须等所有模型返回后才能进入下一阶段**。
+**并行调用**：使用 `run_in_background: true` 启动，用 `TaskOutput` 等待结果（必须等所有模型返回后才能进入下一阶段）。
 
-**等待后台任务**（使用最大超时 600000ms = 10 分钟）：
-
-```
-TaskOutput({ task_id: "<task_id>", block: true, timeout: 600000 })
-```
-
-**重要**：
-- 必须指定 `timeout: 600000`，否则默认只有 30 秒会导致提前超时。
-如果 10 分钟后仍未完成，继续用 `TaskOutput` 轮询，**绝对不要 Kill 进程**。
-- 若因等待时间过长跳过了等待 TaskOutput 结果，则**必须调用 `AskUserQuestion` 工具询问用户选择继续等待还是 Kill Task。禁止直接 Kill Task。**
+**等待后台任务**：`TaskOutput({ task_id, block: true, timeout: 600000 })`。超时后继续轮询，**禁止 Kill**；若需放弃则 `AskUserQuestion` 确认。
 
 ---
 
@@ -118,6 +104,10 @@ TaskOutput({ task_id: "<task_id>", block: true, timeout: 600000 })
 
 `[模式：研究]` - 理解需求并收集上下文：
 
+#### 上下文检索策略
+
+{{CONTEXT_STRATEGY}}
+
 1. **Prompt 增强**（按 `/ccg:enhance` 的逻辑执行）：分析 $ARGUMENTS 的意图、缺失信息、隐含假设，补全为结构化需求（明确目标、技术约束、范围边界、验收标准），**用增强结果替代原始 $ARGUMENTS，后续调用 Codex/Gemini 时传入增强后的需求**
 2. **上下文检索**：调用 `{{MCP_SEARCH_TOOL}}`
 3. **需求完整性评分**（0-10 分）：
@@ -134,8 +124,6 @@ TaskOutput({ task_id: "<task_id>", block: true, timeout: 600000 })
 
 用 `TaskOutput` 等待结果。**📌 保存 SESSION_ID**（`CODEX_SESSION` 和 `GEMINI_SESSION`）。
 
-**务必遵循上方 `多模型调用规范` 的 `重要` 指示**
-
 综合两方分析，输出方案对比（至少 2 个方案），等待用户选择。
 
 ### 📋 阶段 3：详细规划
@@ -147,8 +135,6 @@ TaskOutput({ task_id: "<task_id>", block: true, timeout: 600000 })
 - Gemini：使用规划提示词 + `resume $GEMINI_SESSION`，输出前端架构
 
 用 `TaskOutput` 等待结果。
-
-**务必遵循上方 `多模型调用规范` 的 `重要` 指示**
 
 **Claude 综合规划**：采纳 Codex 后端规划 + Gemini 前端规划，用户批准后存入 `.claude/plan/任务名.md`
 
@@ -169,8 +155,6 @@ TaskOutput({ task_id: "<task_id>", block: true, timeout: 600000 })
 - Gemini：使用审查提示词，关注可访问性、设计一致性
 
 用 `TaskOutput` 等待结果。整合审查意见，用户确认后执行优化。
-
-**务必遵循上方 `多模型调用规范` 的 `重要` 指示**
 
 ### ✅ 阶段 6：质量审查
 

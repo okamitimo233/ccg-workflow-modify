@@ -29,21 +29,18 @@ description: '多模型性能优化：Codex 后端优化 + Gemini 前端优化'
 
 ## 多模型调用规范
 
-**工作目录**：
-- `{{WORKDIR}}`：替换为目标工作目录的**绝对路径**
-- 如果用户通过 `/add-dir` 添加了多个工作区，先用 Glob/Grep 确定任务相关的工作区
-- 如果无法确定，用 `AskUserQuestion` 询问用户选择目标工作区
-- 默认使用当前工作目录
+**工作目录**：`{{WORKDIR}}` — 多工作区时用 Glob/Grep 确认，不确定则 `AskUserQuestion`。
 
-**调用语法**（并行用 `run_in_background: true`）：
+**调用语法**（后端用 `{{BACKEND_EXEC_FLAGS}}`，前端用 `{{FRONTEND_EXEC_FLAGS}}`）：
 
 ```
 Bash({
-  command: "~/.claude/bin/codeagent-wrapper {{LITE_MODE_FLAG}}--backend <codex|gemini> {{GEMINI_MODEL_FLAG}}- \"{{WORKDIR}}\" <<'EOF'
+  command: "~/.claude/bin/codeagent-wrapper {{LITE_MODE_FLAG}}{{BACKEND_EXEC_FLAGS}}- \"{{WORKDIR}}\" <<'EOF'
 ROLE_FILE: <角色提示词路径>
 <TASK>
 需求：<增强后的需求（如未增强则用 $ARGUMENTS）>
 上下文：<目标代码、现有性能指标等>
+{{CONTEXT_RULES}}
 </TASK>
 OUTPUT: 性能瓶颈列表、优化方案、预期收益
 EOF",
@@ -53,9 +50,6 @@ EOF",
 })
 ```
 
-**模型参数说明**：
-- `{{GEMINI_MODEL_FLAG}}`：当使用 `--backend gemini` 时，替换为 `--gemini-model gemini-3-pro-preview `（注意末尾空格）；使用 codex 时替换为空字符串
-
 **角色提示词**：
 
 | 模型 | 提示词 |
@@ -63,18 +57,15 @@ EOF",
 | Codex | `~/.claude/.ccg/prompts/codex/optimizer.md` |
 | Gemini | `~/.claude/.ccg/prompts/gemini/optimizer.md` |
 
-**并行调用**：使用 `run_in_background: true` 启动，用 `TaskOutput` 等待结果。**必须等所有模型返回后才能进入下一阶段**。
+**并行调用**：使用 `run_in_background: true` 启动，用 `TaskOutput` 等待结果（必须等所有模型返回后才能进入下一阶段）。
 
-**等待后台任务**（使用最大超时 600000ms = 10 分钟）：
+**等待后台任务**：
 
 ```
 TaskOutput({ task_id: "<task_id>", block: true, timeout: 600000 })
 ```
 
-**重要**：
-- 必须指定 `timeout: 600000`，否则默认只有 30 秒会导致提前超时。
-如果 10 分钟后仍未完成，继续用 `TaskOutput` 轮询，**绝对不要 Kill 进程**。
-- 若因等待时间过长跳过了等待 TaskOutput 结果，则**必须调用 `AskUserQuestion` 工具询问用户选择继续等待还是 Kill Task。禁止直接 Kill Task。**
+禁止 Kill 进程。等待过长时用 `AskUserQuestion` 询问用户。
 
 ---
 
@@ -96,6 +87,10 @@ TaskOutput({ task_id: "<task_id>", block: true, timeout: 600000 })
 
 `[模式：研究]`
 
+#### 上下文检索策略
+
+{{CONTEXT_STRATEGY}}
+
 1. 调用 `{{MCP_SEARCH_TOOL}}` 检索目标代码（如可用）
 2. 识别性能关键路径
 3. 收集现有指标（如有）
@@ -104,21 +99,19 @@ TaskOutput({ task_id: "<task_id>", block: true, timeout: 600000 })
 
 `[模式：分析]`
 
-**⚠️ 必须发起两个并行 Bash 调用**（参照上方调用规范）：
+**并行调用 Codex + Gemini**（参照上方规范）：
 
-1. **Codex 后端分析**：`Bash({ command: "...--backend codex...", run_in_background: true })`
+1. **Codex 后端分析**：`Bash({ command: "...{{BACKEND_EXEC_FLAGS}}...", run_in_background: true })`
    - ROLE_FILE: `~/.claude/.ccg/prompts/codex/optimizer.md`
    - 需求：分析后端性能问题（$ARGUMENTS）
    - OUTPUT：性能瓶颈列表、优化方案、预期收益
 
-2. **Gemini 前端分析**：`Bash({ command: "...--backend gemini...", run_in_background: true })`
+2. **Gemini 前端分析**：`Bash({ command: "...{{FRONTEND_EXEC_FLAGS}}...", run_in_background: true })`
    - ROLE_FILE: `~/.claude/.ccg/prompts/gemini/optimizer.md`
    - 需求：分析前端性能问题（Core Web Vitals）
    - OUTPUT：性能瓶颈列表、优化方案、预期收益
 
-用 `TaskOutput` 等待两个模型的完整结果。**必须等所有模型返回后才能进入下一阶段**。
-
-**务必遵循上方 `多模型调用规范` 的 `重要` 指示**
+用 `TaskOutput` 等待两个模型的完整结果（必须等所有模型返回后才能进入下一阶段）。
 
 ### 🔀 阶段 3：优化整合
 

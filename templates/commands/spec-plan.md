@@ -20,17 +20,21 @@ description: '多模型分析 → 消除歧义 → 零决策可执行计划'
    - Confirm with user which change ID to refine.
    - Run `openspec status --change "<change_id>" --json` to review current state.
 
-2. **Multi-Model Implementation Analysis (PARALLEL)**
+2. **上下文检索策略**
+
+   {{CONTEXT_STRATEGY}}
+
+3. **Multi-Model Implementation Analysis (PARALLEL)**
    - **CRITICAL**: You MUST launch BOTH Codex AND Gemini in a SINGLE message with TWO Bash tool calls.
    - **DO NOT** call one model first and wait. Launch BOTH simultaneously with `run_in_background: true`.
-   - **工作目录**：`{{WORKDIR}}` 替换为目标工作目录的绝对路径。如果用户通过 `/add-dir` 添加了多个工作区，先确定任务相关的工作区。
+   - **工作目录**：`{{WORKDIR}}` — 多工作区时用 Glob/Grep 确认，不确定则 `AskUserQuestion`。
 
-   **Step 2.1**: In ONE message, make TWO parallel Bash calls:
+   **Step 3.1**: In ONE message, make TWO parallel Bash calls:
 
    **FIRST Bash call (Codex)**:
    ```
    Bash({
-     command: "~/.claude/bin/codeagent-wrapper --backend codex - \"{{WORKDIR}}\" <<'EOF'\nAnalyze change <change_id> from backend perspective:\n- Implementation approach\n- Technical risks\n- Alternative architectures\n- Edge cases and failure modes\nOUTPUT: JSON with analysis\nEOF",
+     command: "~/.claude/bin/codeagent-wrapper {{BACKEND_EXEC_FLAGS}}- \"{{WORKDIR}}\" <<'EOF'\nAnalyze change <change_id> from backend perspective:\n- Implementation approach\n- Technical risks\n- Alternative architectures\n- Edge cases and failure modes\nOUTPUT: JSON with analysis\nEOF",
      run_in_background: true,
      timeout: 300000,
      description: "Codex: backend analysis"
@@ -40,14 +44,14 @@ description: '多模型分析 → 消除歧义 → 零决策可执行计划'
    **SECOND Bash call (Gemini) - IN THE SAME MESSAGE**:
    ```
    Bash({
-     command: "~/.claude/bin/codeagent-wrapper --backend gemini --gemini-model gemini-3-pro-preview - \"{{WORKDIR}}\" <<'EOF'\nAnalyze change <change_id> from frontend/integration perspective:\n- Maintainability assessment\n- Scalability considerations\n- Integration conflicts\nOUTPUT: JSON with analysis\nEOF",
+     command: "~/.claude/bin/codeagent-wrapper {{FRONTEND_EXEC_FLAGS}}- \"{{WORKDIR}}\" <<'EOF'\nAnalyze change <change_id> from frontend/integration perspective:\n- Maintainability assessment\n- Scalability considerations\n- Integration conflicts\nOUTPUT: JSON with analysis\nEOF",
      run_in_background: true,
      timeout: 300000,
      description: "Gemini: frontend analysis"
    })
    ```
 
-   **Step 2.2**: After BOTH Bash calls return task IDs, wait for results with TWO TaskOutput calls:
+   **Step 3.2**: After BOTH Bash calls return task IDs, wait for results with TWO TaskOutput calls:
    ```
    TaskOutput({ task_id: "<codex_task_id>", block: true, timeout: 600000 })
    TaskOutput({ task_id: "<gemini_task_id>", block: true, timeout: 600000 })
@@ -55,7 +59,7 @@ description: '多模型分析 → 消除歧义 → 零决策可执行计划'
 
    - Synthesize responses and present consolidated options to user.
 
-3. **Uncertainty Elimination Audit**
+4. **Uncertainty Elimination Audit**
    - **Codex**: "Review proposal for unspecified decision points. List each as: [AMBIGUITY] → [REQUIRED CONSTRAINT]"
    - **Gemini**: "Identify implicit assumptions. Specify: [ASSUMPTION] → [EXPLICIT CONSTRAINT NEEDED]"
 
@@ -71,7 +75,7 @@ description: '多模型分析 → 消除歧义 → 零决策可执行计划'
 
    Iterate with user until ALL ambiguities resolved.
 
-4. **PBT Property Extraction**
+5. **PBT Property Extraction**
    - **Codex**: "Extract PBT properties. For each requirement: [INVARIANT] → [FALSIFICATION STRATEGY]"
    - **Gemini**: "Define system properties: [PROPERTY] | [DEFINITION] | [BOUNDARY CONDITIONS] | [COUNTEREXAMPLE GENERATION]"
 
@@ -83,14 +87,14 @@ description: '多模型分析 → 消除歧义 → 零决策可执行计划'
    - **Monotonicity**: Ordering guarantees (e.g., timestamps increase)
    - **Bounds**: Value ranges, size limits, rate constraints
 
-5. **Update OPSX Artifacts**
+6. **Update OPSX Artifacts**
    - The agent will use OpenSpec skills to generate/update:
      * specs (Requirements + PBT)
      * design (Technical decisions)
      * tasks (Zero-decision implementation plan)
    - Ensure all resolved constraints and PBT properties are included in the generated artifacts.
 
-6. **Context Checkpoint**
+7. **Context Checkpoint**
    - Report current context usage.
    - If approaching 80K tokens, suggest: "Run `/clear` and continue with `/ccg:spec-impl`"
 

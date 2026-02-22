@@ -20,22 +20,19 @@ $ARGUMENTS
 
 ## 多模型调用规范
 
-**工作目录**：
-- `{{WORKDIR}}`：替换为目标工作目录的**绝对路径**
-- 如果用户通过 `/add-dir` 添加了多个工作区，先用 Glob/Grep 确定任务相关的工作区
-- 如果无法确定，用 `AskUserQuestion` 询问用户选择目标工作区
-- 默认使用当前工作目录
+**工作目录**：`{{WORKDIR}}` — 多工作区时用 Glob/Grep 确认，不确定则 `AskUserQuestion`。
 
-**调用语法**（并行用 `run_in_background: true`）：
+**调用语法**（后端用 `{{BACKEND_EXEC_FLAGS}}`，前端用 `{{FRONTEND_EXEC_FLAGS}}`）：
 
 ```
 # 复用会话调用（推荐）- 原型生成（Implementation Prototype）
 Bash({
-  command: "~/.claude/bin/codeagent-wrapper {{LITE_MODE_FLAG}}--backend <codex|gemini> {{GEMINI_MODEL_FLAG}}resume <SESSION_ID> - \"{{WORKDIR}}\" <<'EOF'
+  command: "~/.claude/bin/codeagent-wrapper {{LITE_MODE_FLAG}}{{BACKEND_EXEC_FLAGS}}resume <SESSION_ID> - \"{{WORKDIR}}\" <<'EOF'
 ROLE_FILE: <角色提示词路径>
 <TASK>
 需求：<任务描述>
 上下文：<计划内容 + 目标文件>
+{{CONTEXT_RULES}}
 </TASK>
 OUTPUT: Unified Diff Patch ONLY. Strictly prohibit any actual modifications.
 EOF",
@@ -46,11 +43,12 @@ EOF",
 
 # 新会话调用 - 原型生成（Implementation Prototype）
 Bash({
-  command: "~/.claude/bin/codeagent-wrapper {{LITE_MODE_FLAG}}--backend <codex|gemini> {{GEMINI_MODEL_FLAG}}- \"{{WORKDIR}}\" <<'EOF'
+  command: "~/.claude/bin/codeagent-wrapper {{LITE_MODE_FLAG}}{{BACKEND_EXEC_FLAGS}}- \"{{WORKDIR}}\" <<'EOF'
 ROLE_FILE: <角色提示词路径>
 <TASK>
 需求：<任务描述>
 上下文：<计划内容 + 目标文件>
+{{CONTEXT_RULES}}
 </TASK>
 OUTPUT: Unified Diff Patch ONLY. Strictly prohibit any actual modifications.
 EOF",
@@ -64,7 +62,7 @@ EOF",
 
 ```
 Bash({
-  command: "~/.claude/bin/codeagent-wrapper {{LITE_MODE_FLAG}}--backend <codex|gemini> {{GEMINI_MODEL_FLAG}}resume <SESSION_ID> - \"{{WORKDIR}}\" <<'EOF'
+  command: "~/.claude/bin/codeagent-wrapper {{LITE_MODE_FLAG}}{{BACKEND_EXEC_FLAGS}}resume <SESSION_ID> - \"{{WORKDIR}}\" <<'EOF'
 ROLE_FILE: <角色提示词路径>
 <TASK>
 Scope: Audit the final code changes.
@@ -74,6 +72,7 @@ Inputs:
 Constraints:
 - Do NOT modify any files.
 - Do NOT output tool commands that assume filesystem access.
+{{CONTEXT_RULES}}
 </TASK>
 OUTPUT:
 1) A prioritized list of issues (severity, file, rationale)
@@ -85,9 +84,6 @@ EOF",
 })
 ```
 
-**模型参数说明**：
-- `{{GEMINI_MODEL_FLAG}}`：当使用 `--backend gemini` 时，替换为 `--gemini-model gemini-3-pro-preview `（注意末尾空格）；使用 codex 时替换为空字符串
-
 **角色提示词**：
 
 | 阶段 | Codex | Gemini |
@@ -97,16 +93,15 @@ EOF",
 
 **会话复用**：如果 `/ccg:plan` 提供了 SESSION_ID，使用 `resume <SESSION_ID>` 复用上下文。
 
-**等待后台任务**（最大超时 600000ms = 10 分钟）：
+**并行调用**：使用 `run_in_background: true` 启动，用 `TaskOutput` 等待结果（必须等所有模型返回后才能进入下一阶段）。
+
+**等待后台任务**：
 
 ```
 TaskOutput({ task_id: "<task_id>", block: true, timeout: 600000 })
 ```
 
-**重要**：
-- 必须指定 `timeout: 600000`，否则默认只有 30 秒会导致提前超时
-- 若 10 分钟后仍未完成，继续用 `TaskOutput` 轮询，**绝对不要 Kill 进程**
-- 若因等待时间过长跳过了等待，**必须调用 `AskUserQuestion` 询问用户选择继续等待还是 Kill Task**
+禁止 Kill 进程。等待过长时用 `AskUserQuestion` 询问用户。
 
 ---
 
@@ -146,11 +141,15 @@ TaskOutput({ task_id: "<task_id>", block: true, timeout: 600000 })
 
 **⚠️ 必须使用 MCP 工具快速检索上下文，禁止手动逐个读取文件**
 
+#### 上下文检索策略
+
+{{CONTEXT_STRATEGY}}
+
 根据计划中的"关键文件"列表，调用 `{{MCP_SEARCH_TOOL}}` 检索相关代码：
 
 ```
 {{MCP_SEARCH_TOOL}}({
-  query: "<基于计划内容构建的语义查询，包含关键文件、模块、函数名>",
+  {{MCP_SEARCH_PARAM}}: "<基于计划内容构建的语义查询，包含关键文件、模块、函数名>",
   project_root_path: "{{WORKDIR}}"
 })
 ```
@@ -200,8 +199,6 @@ TaskOutput({ task_id: "<task_id>", block: true, timeout: 600000 })
    - Codex：处理后端部分
 2. 用 `TaskOutput` 等待两个模型的完整结果
 3. 各自使用计划中对应的 `SESSION_ID` 进行 `resume`（若缺失则创建新会话）
-
-**务必遵循上方 `多模型调用规范` 的 `重要` 指示**
 
 ---
 

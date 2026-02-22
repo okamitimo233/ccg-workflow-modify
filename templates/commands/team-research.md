@@ -32,14 +32,18 @@ description: 'Agent Teams 需求研究 - 并行探索代码库，产出约束集
      * 边界 3：基础设施（configs, builds, deployments）
    - 每个边界应自包含，无需跨边界通信。
 
-3. **多模型并行探索（PARALLEL）**
+3. **上下文检索策略**
+
+   {{CONTEXT_STRATEGY}}
+
+4. **多模型并行探索（PARALLEL）**
    - **CRITICAL**: 必须在一条消息中同时发起两个 Bash 调用。
-   - **工作目录**：`{{WORKDIR}}` 替换为目标工作目录的绝对路径。
+   - **工作目录**：`{{WORKDIR}}` — 多工作区时用 Glob/Grep 确认，不确定则 `AskUserQuestion`。
 
    **FIRST Bash call (Codex)**:
    ```
    Bash({
-     command: "~/.claude/bin/codeagent-wrapper {{LITE_MODE_FLAG}}--backend codex - \"{{WORKDIR}}\" <<'EOF'\nROLE_FILE: ~/.claude/.ccg/prompts/codex/analyzer.md\n<TASK>\n需求：<增强后的需求>\n探索范围：后端相关上下文边界\n</TASK>\nOUTPUT (JSON):\n{\n  \"module_name\": \"探索的上下文边界\",\n  \"existing_structures\": [\"发现的关键模式\"],\n  \"existing_conventions\": [\"使用中的规范\"],\n  \"constraints_discovered\": [\"限制解决方案空间的硬约束\"],\n  \"open_questions\": [\"需要用户确认的歧义\"],\n  \"dependencies\": [\"跨模块依赖\"],\n  \"risks\": [\"潜在阻碍\"],\n  \"success_criteria_hints\": [\"可观测的成功行为\"]\n}\nEOF",
+     command: "~/.claude/bin/codeagent-wrapper {{LITE_MODE_FLAG}}{{BACKEND_EXEC_FLAGS}}- \"{{WORKDIR}}\" <<'EOF'\nROLE_FILE: ~/.claude/.ccg/prompts/codex/analyzer.md\n<TASK>\n需求：<增强后的需求>\n探索范围：后端相关上下文边界\n{{CONTEXT_RULES}}\n</TASK>\nOUTPUT (JSON):\n{\n  \"module_name\": \"探索的上下文边界\",\n  \"existing_structures\": [\"发现的关键模式\"],\n  \"existing_conventions\": [\"使用中的规范\"],\n  \"constraints_discovered\": [\"限制解决方案空间的硬约束\"],\n  \"open_questions\": [\"需要用户确认的歧义\"],\n  \"dependencies\": [\"跨模块依赖\"],\n  \"risks\": [\"潜在阻碍\"],\n  \"success_criteria_hints\": [\"可观测的成功行为\"]\n}\nEOF",
      run_in_background: true,
      timeout: 3600000,
      description: "Codex 后端探索"
@@ -49,7 +53,7 @@ description: 'Agent Teams 需求研究 - 并行探索代码库，产出约束集
    **SECOND Bash call (Gemini) - IN THE SAME MESSAGE**:
    ```
    Bash({
-     command: "~/.claude/bin/codeagent-wrapper {{LITE_MODE_FLAG}}--backend gemini {{GEMINI_MODEL_FLAG}}- \"{{WORKDIR}}\" <<'EOF'\nROLE_FILE: ~/.claude/.ccg/prompts/gemini/analyzer.md\n<TASK>\n需求：<增强后的需求>\n探索范围：前端相关上下文边界\n</TASK>\nOUTPUT (JSON):\n{\n  \"module_name\": \"探索的上下文边界\",\n  \"existing_structures\": [\"发现的关键模式\"],\n  \"existing_conventions\": [\"使用中的规范\"],\n  \"constraints_discovered\": [\"限制解决方案空间的硬约束\"],\n  \"open_questions\": [\"需要用户确认的歧义\"],\n  \"dependencies\": [\"跨模块依赖\"],\n  \"risks\": [\"潜在阻碍\"],\n  \"success_criteria_hints\": [\"可观测的成功行为\"]\n}\nEOF",
+     command: "~/.claude/bin/codeagent-wrapper {{LITE_MODE_FLAG}}{{FRONTEND_EXEC_FLAGS}}- \"{{WORKDIR}}\" <<'EOF'\nROLE_FILE: ~/.claude/.ccg/prompts/gemini/analyzer.md\n<TASK>\n需求：<增强后的需求>\n探索范围：前端相关上下文边界\n{{CONTEXT_RULES}}\n</TASK>\nOUTPUT (JSON):\n{\n  \"module_name\": \"探索的上下文边界\",\n  \"existing_structures\": [\"发现的关键模式\"],\n  \"existing_conventions\": [\"使用中的规范\"],\n  \"constraints_discovered\": [\"限制解决方案空间的硬约束\"],\n  \"open_questions\": [\"需要用户确认的歧义\"],\n  \"dependencies\": [\"跨模块依赖\"],\n  \"risks\": [\"潜在阻碍\"],\n  \"success_criteria_hints\": [\"可观测的成功行为\"]\n}\nEOF",
      run_in_background: true,
      timeout: 3600000,
      description: "Gemini 前端探索"
@@ -62,14 +66,14 @@ description: 'Agent Teams 需求研究 - 并行探索代码库，产出约束集
    TaskOutput({ task_id: "<gemini_task_id>", block: true, timeout: 600000 })
    ```
 
-4. **聚合与综合**
+5. **聚合与综合**
    - 合并所有探索输出为统一约束集：
      * **硬约束**：技术限制、不可违反的模式
      * **软约束**：惯例、偏好、风格指南
      * **依赖**：影响实施顺序的跨模块关系
      * **风险**：需要缓解的阻碍
 
-5. **歧义消解**
+6. **歧义消解**
    - 编译优先级排序的开放问题列表。
    - 用 `AskUserQuestion` 系统性地呈现：
      * 分组相关问题
@@ -77,7 +81,7 @@ description: 'Agent Teams 需求研究 - 并行探索代码库，产出约束集
      * 在适用时建议默认值
    - 将用户回答转化为额外约束。
 
-6. **写入研究文件**
+7. **写入研究文件**
    - 路径：`.claude/team-plan/<任务名>-research.md`
    - 格式：
 
@@ -111,7 +115,7 @@ description: 'Agent Teams 需求研究 - 并行探索代码库，产出约束集
    - Q1: <问题> → A: <用户回答> → 约束：[HC/SC-N]
    ```
 
-7. **上下文检查点**
+8. **上下文检查点**
    - 报告当前上下文使用量。
    - 提示：`研究完成，运行 /clear 后执行 /ccg:team-plan <任务名> 开始规划`
 

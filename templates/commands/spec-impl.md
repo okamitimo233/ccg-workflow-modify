@@ -29,15 +29,28 @@ description: '按规范执行 + 多模型协作 + 归档'
    - Do NOT complete all tasks at once—control context window.
    - Announce: "Implementing Phase X: [task group name]"
 
-4. **Route Tasks to Appropriate Model**
+4. **上下文检索策略**
+
+   {{CONTEXT_STRATEGY}}
+
+5. **Route Tasks to Appropriate Model**
    - **Route A: Gemini** — Frontend/UI/styling (CSS, React, Vue, HTML, components)
    - **Route B: Codex** — Backend/logic/algorithm (API, data processing, business logic)
 
-   **工作目录**：`{{WORKDIR}}` 替换为目标工作目录的绝对路径。如果用户通过 `/add-dir` 添加了多个工作区，先确定任务相关的工作区。
+   **工作目录**：`{{WORKDIR}}` — 多工作区时用 Glob/Grep 确认，不确定则 `AskUserQuestion`。
 
    For each task:
    ```
-   codeagent-wrapper --backend <codex|gemini> --gemini-model gemini-3-pro-preview - "{{WORKDIR}}" <<'EOF'
+   # Route A (前端/UI):
+   codeagent-wrapper {{FRONTEND_EXEC_FLAGS}}- "{{WORKDIR}}" <<'EOF'
+   TASK: <task description from tasks.md>
+   CONTEXT: <relevant code context>
+   CONSTRAINTS: <constraints from spec>
+   OUTPUT: Unified Diff Patch format ONLY
+   EOF
+
+   # Route B (后端/逻辑):
+   codeagent-wrapper {{BACKEND_EXEC_FLAGS}}- "{{WORKDIR}}" <<'EOF'
    TASK: <task description from tasks.md>
    CONTEXT: <relevant code context>
    CONSTRAINTS: <constraints from spec>
@@ -45,9 +58,7 @@ description: '按规范执行 + 多模型协作 + 归档'
    EOF
    ```
 
-   Note: `--gemini-model` parameter is only used when `--backend gemini` is specified.
-
-5. **Rewrite Prototype to Production Code**
+6. **Rewrite Prototype to Production Code**
    Upon receiving diff patch, **NEVER apply directly**. Rewrite by:
    - Removing redundancy
    - Ensuring clear naming and simple structure
@@ -55,7 +66,7 @@ description: '按规范执行 + 多模型协作 + 归档'
    - Eliminating unnecessary comments
    - Verifying no new dependencies introduced
 
-6. **Side-Effect Review** (Mandatory before apply)
+7. **Side-Effect Review** (Mandatory before apply)
    Verify the change:
    - [ ] Does not exceed `tasks.md` scope
    - [ ] Does not affect unrelated modules
@@ -64,16 +75,16 @@ description: '按规范执行 + 多模型协作 + 归档'
 
    If issues found, make targeted corrections.
 
-7. **Multi-Model Review (PARALLEL)**
+8. **Multi-Model Review (PARALLEL)**
    - **CRITICAL**: You MUST launch BOTH Codex AND Gemini in a SINGLE message with TWO Bash tool calls.
    - **DO NOT** call one model first and wait. Launch BOTH simultaneously with `run_in_background: true`.
 
-   **Step 7.1**: In ONE message, make TWO parallel Bash calls:
+   **Step 8.1**: In ONE message, make TWO parallel Bash calls:
 
    **FIRST Bash call (Codex)**:
    ```
    Bash({
-     command: "~/.claude/bin/codeagent-wrapper --backend codex - \"{{WORKDIR}}\" <<'EOF'\nReview the implementation changes:\n- Correctness: logic errors, edge cases\n- Security: injection, auth issues\n- Spec compliance: constraints satisfied\nOUTPUT: JSON with findings\nEOF",
+     command: "~/.claude/bin/codeagent-wrapper {{BACKEND_EXEC_FLAGS}}- \"{{WORKDIR}}\" <<'EOF'\nReview the implementation changes:\n- Correctness: logic errors, edge cases\n- Security: injection, auth issues\n- Spec compliance: constraints satisfied\nOUTPUT: JSON with findings\nEOF",
      run_in_background: true,
      timeout: 300000,
      description: "Codex: correctness/security review"
@@ -83,14 +94,14 @@ description: '按规范执行 + 多模型协作 + 归档'
    **SECOND Bash call (Gemini) - IN THE SAME MESSAGE**:
    ```
    Bash({
-     command: "~/.claude/bin/codeagent-wrapper --backend gemini --gemini-model gemini-3-pro-preview - \"{{WORKDIR}}\" <<'EOF'\nReview the implementation changes:\n- Maintainability: readability, complexity\n- Patterns: consistency with project style\n- Integration: cross-module impacts\nOUTPUT: JSON with findings\nEOF",
+     command: "~/.claude/bin/codeagent-wrapper {{FRONTEND_EXEC_FLAGS}}- \"{{WORKDIR}}\" <<'EOF'\nReview the implementation changes:\n- Maintainability: readability, complexity\n- Patterns: consistency with project style\n- Integration: cross-module impacts\nOUTPUT: JSON with findings\nEOF",
      run_in_background: true,
      timeout: 300000,
      description: "Gemini: maintainability/patterns review"
    })
    ```
 
-   **Step 7.2**: After BOTH Bash calls return task IDs, wait for results with TWO TaskOutput calls:
+   **Step 8.2**: After BOTH Bash calls return task IDs, wait for results with TWO TaskOutput calls:
    ```
    TaskOutput({ task_id: "<codex_task_id>", block: true, timeout: 600000 })
    TaskOutput({ task_id: "<gemini_task_id>", block: true, timeout: 600000 })
@@ -98,16 +109,16 @@ description: '按规范执行 + 多模型协作 + 归档'
 
    Address any critical findings before proceeding.
 
-8. **Update Task Status**
+9. **Update Task Status**
    - Mark completed task in `tasks.md`: `- [x] Task description`
    - Commit changes if appropriate.
 
-9. **Context Checkpoint**
+10. **Context Checkpoint**
    - After completing a phase, report context usage.
    - If below 80K: Ask user "Continue to next phase?"
    - If approaching 80K: Suggest "Run `/clear` and resume with `/ccg:spec:impl`"
 
-10. **Archive on Completion**
+11. **Archive on Completion**
     - When ALL tasks in `tasks.md` are marked `[x]`:
     - The agent will use OpenSpec skills to archive the change.
     - This merges spec deltas to `openspec/specs/` and moves change to archive.

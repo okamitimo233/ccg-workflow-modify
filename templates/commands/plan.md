@@ -20,21 +20,18 @@ $ARGUMENTS
 
 ## 多模型调用规范
 
-**工作目录**：
-- `{{WORKDIR}}`：替换为目标工作目录的**绝对路径**
-- 如果用户通过 `/add-dir` 添加了多个工作区，先用 Glob/Grep 确定任务相关的工作区
-- 如果无法确定，用 `AskUserQuestion` 询问用户选择目标工作区
-- 默认使用当前工作目录
+**工作目录**：`{{WORKDIR}}` — 多工作区时用 Glob/Grep 确认，不确定则 `AskUserQuestion`。
 
-**调用语法**（并行用 `run_in_background: true`）：
+**调用语法**（后端用 `{{BACKEND_EXEC_FLAGS}}`，前端用 `{{FRONTEND_EXEC_FLAGS}}`）：
 
 ```
 Bash({
-  command: "~/.claude/bin/codeagent-wrapper {{LITE_MODE_FLAG}}--backend <codex|gemini> {{GEMINI_MODEL_FLAG}}- \"{{WORKDIR}}\" <<'EOF'
+  command: "~/.claude/bin/codeagent-wrapper {{LITE_MODE_FLAG}}{{BACKEND_EXEC_FLAGS}}- \"{{WORKDIR}}\" <<'EOF'
 ROLE_FILE: <角色提示词路径>
 <TASK>
 需求：<增强后的需求>
 上下文：<检索到的项目上下文>
+{{CONTEXT_RULES}}
 </TASK>
 OUTPUT: Step-by-step implementation plan with pseudo-code. DO NOT modify any files.
 EOF",
@@ -43,9 +40,6 @@ EOF",
   description: "简短描述"
 })
 ```
-
-**模型参数说明**：
-- `{{GEMINI_MODEL_FLAG}}`：当使用 `--backend gemini` 时，替换为 `--gemini-model gemini-3-pro-preview `（注意末尾空格）；使用 codex 时替换为空字符串
 
 **角色提示词**：
 
@@ -56,16 +50,7 @@ EOF",
 
 **会话复用**：每次调用返回 `SESSION_ID: xxx`（通常由 wrapper 输出），**必须保存**以供后续 `/ccg:execute` 使用。
 
-**等待后台任务**（最大超时 600000ms = 10 分钟）：
-
-```
-TaskOutput({ task_id: "<task_id>", block: true, timeout: 600000 })
-```
-
-**重要**：
-- 必须指定 `timeout: 600000`，否则默认只有 30 秒会导致提前超时
-- 若 10 分钟后仍未完成，继续用 `TaskOutput` 轮询，**绝对不要 Kill 进程**
-- 若因等待时间过长跳过了等待，**必须调用 `AskUserQuestion` 询问用户选择继续等待还是 Kill Task**
+**等待后台任务**：`TaskOutput({ task_id, block: true, timeout: 600000 })` — 超时后继续轮询，**不要 Kill**；若仍无响应则 `AskUserQuestion` 让用户决定。
 
 ---
 
@@ -83,11 +68,15 @@ TaskOutput({ task_id: "<task_id>", block: true, timeout: 600000 })
 
 #### 1.2 上下文检索
 
+#### 上下文检索策略
+
+{{CONTEXT_STRATEGY}}
+
 **调用 `{{MCP_SEARCH_TOOL}}` 工具**：
 
 ```
 {{MCP_SEARCH_TOOL}}({
-  query: "<基于增强后需求构建的语义查询>",
+  {{MCP_SEARCH_PARAM}}: "<基于增强后需求构建的语义查询>",
   project_root_path: "{{WORKDIR}}"
 })
 ```
