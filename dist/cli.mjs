@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import cac from 'cac';
 import ansis from 'ansis';
-import { A as diagnoseMcpConfig, B as isWindows, C as readClaudeCodeConfig, D as fixWindowsMcpConfig, E as writeClaudeCodeConfig, u as readCcgConfig, n as initI18n, v as showMainMenu, m as init, F as configMcp, G as version, l as i18n } from './shared/ccg-workflow-modify.CM0XzahC.mjs';
+import { A as diagnoseMcpConfig, B as isWindows, C as readClaudeCodeConfig, D as fixWindowsMcpConfig, E as writeClaudeCodeConfig, u as readCcgConfig, n as initI18n, v as showMainMenu, m as init, F as configMcp, G as version, l as i18n } from './shared/ccg-workflow-modify.Cubnrd2p.mjs';
 import 'inquirer';
 import 'node:child_process';
 import 'node:util';
@@ -12,6 +12,7 @@ import 'fs-extra';
 import 'i18next';
 import 'ora';
 import 'smol-toml';
+import 'semver';
 
 async function diagnoseMcp() {
   console.log();

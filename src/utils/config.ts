@@ -64,10 +64,6 @@ function mapLegacyModelToCliTool(model: ModelType, area: 'frontend' | 'backend')
   return area === 'backend' ? 'codex' : 'opencode'
 }
 
-function cliToolToLegacyModel(cliTool: CliTool): ModelType {
-  if (cliTool === 'codex') return 'codex'
-  return 'gemini'
-}
 
 function migrateRoutingTarget(raw: unknown, area: 'frontend' | 'backend'): ModelRouting['frontend'] {
   const target = isRecord(raw) ? raw : {}
@@ -88,27 +84,20 @@ function migrateRoutingTarget(raw: unknown, area: 'frontend' | 'backend'): Model
         : defaultCliTool
 
   const model_id = typeof target.model_id === 'string' ? target.model_id : defaultModelId
-  const strategy = isRoutingStrategy(target.strategy) ? target.strategy : 'fallback'
+  const strategy = isRoutingStrategy(target.strategy) ? target.strategy : 'parallel'
 
-  // 保留兼容字段供 installer/update 等旧消费者使用
-  const compatModel = cliToolToLegacyModel(cli_tool)
-
-  return { cli_tool, model_id, strategy, models: [compatModel], primary: compatModel }
+  return { cli_tool, model_id, strategy }
 }
 
 function migrateRouting(raw: unknown): ModelRouting {
   const routing = isRecord(raw) ? raw : {}
   const frontend = migrateRoutingTarget(routing.frontend, 'frontend')
   const backend = migrateRoutingTarget(routing.backend, 'backend')
-  const reviewModels: ModelType[] = [...new Set<ModelType>([
-    frontend.primary || 'gemini',
-    backend.primary || 'codex',
-  ])]
 
   return {
     frontend,
     backend,
-    review: { strategy: 'parallel', models: reviewModels },
+    review: { strategy: 'parallel' },
     mode: isCollaborationMode(routing.mode) ? routing.mode : 'smart',
   }
 }
@@ -296,12 +285,12 @@ export function createDefaultRouting(): ModelRouting {
     frontend: {
       cli_tool: 'opencode',
       model_id: DEFAULT_FRONTEND_MODEL_ID,
-      strategy: 'fallback',
+      strategy: 'parallel',
     },
     backend: {
       cli_tool: 'codex',
       model_id: '',
-      strategy: 'fallback',
+      strategy: 'parallel',
     },
     review: {
       strategy: 'parallel',

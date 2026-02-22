@@ -17,21 +17,21 @@ describe('migrateConfig', () => {
 
     expect(config.routing.frontend).toMatchObject({
       cli_tool: 'opencode',
-      strategy: 'fallback',
-      models: ['gemini'],
-      primary: 'gemini',
+      strategy: 'parallel',
     })
     expect(config.routing.backend).toMatchObject({
       cli_tool: 'codex',
-      strategy: 'fallback',
-      models: ['codex'],
-      primary: 'codex',
-    })
-    expect(config.routing.review).toEqual({
       strategy: 'parallel',
-      models: ['gemini', 'codex'],
     })
+    // M4: review no longer contains models field
+    expect(config.routing.review).toEqual({ strategy: 'parallel' })
     expect(config.routing.mode).toBe('parallel')
+    // M4: deprecated fields should not exist on output
+    expect(config.routing.frontend).not.toHaveProperty('models')
+    expect(config.routing.frontend).not.toHaveProperty('primary')
+    expect(config.routing.backend).not.toHaveProperty('models')
+    expect(config.routing.backend).not.toHaveProperty('primary')
+    expect(config.routing.review).not.toHaveProperty('models')
   })
 
   it('downgrades legacy claude model by area', () => {
@@ -43,10 +43,7 @@ describe('migrateConfig', () => {
     })
 
     expect(config.routing.frontend.cli_tool).toBe('opencode')
-    expect(config.routing.frontend.primary).toBe('gemini')
     expect(config.routing.backend.cli_tool).toBe('codex')
-    expect(config.routing.backend.primary).toBe('codex')
-    expect(config.routing.review.models).toEqual(['gemini', 'codex'])
   })
 
   it('prioritizes routing target fields as cli_tool > primary > models[0] > default', () => {
@@ -79,7 +76,7 @@ describe('migrateConfig', () => {
     expect(fromDefault.routing.frontend.cli_tool).toBe('opencode')
   })
 
-  it('passes through new format with cli_tool and keeps compat legacy fields', () => {
+  it('passes through new format with cli_tool (no legacy compat fields on output)', () => {
     const config = migrateConfig({
       routing: {
         frontend: {
@@ -97,19 +94,15 @@ describe('migrateConfig', () => {
       },
     })
 
-    expect(config.routing.frontend).toMatchObject({
+    expect(config.routing.frontend).toEqual({
       cli_tool: 'codex',
       model_id: 'frontend-id',
       strategy: 'round-robin',
-      primary: 'codex',
-      models: ['codex'],
     })
-    expect(config.routing.backend).toMatchObject({
+    expect(config.routing.backend).toEqual({
       cli_tool: 'opencode',
       model_id: '',
       strategy: 'parallel',
-      primary: 'gemini',
-      models: ['gemini'],
     })
     expect(config.routing.mode).toBe('sequential')
   })
@@ -119,23 +112,17 @@ describe('migrateConfig', () => {
 
     expect(config.general.language).toBe('zh-CN')
     expect(isValidIsoDate(config.general.createdAt)).toBe(true)
-    expect(config.routing.frontend).toMatchObject({
+    expect(config.routing.frontend).toEqual({
       cli_tool: 'opencode',
-      strategy: 'fallback',
-      primary: 'gemini',
-      models: ['gemini'],
+      model_id: 'antigravity/gemini-3-pro-high',
+      strategy: 'parallel',
     })
-    expect(config.routing.backend).toMatchObject({
+    expect(config.routing.backend).toEqual({
       cli_tool: 'codex',
       model_id: '',
-      strategy: 'fallback',
-      primary: 'codex',
-      models: ['codex'],
-    })
-    expect(config.routing.review).toEqual({
       strategy: 'parallel',
-      models: ['gemini', 'codex'],
     })
+    expect(config.routing.review).toEqual({ strategy: 'parallel' })
     expect(config.routing.mode).toBe('smart')
     expect(config.workflows.installed).toEqual([])
   })
@@ -158,19 +145,15 @@ describe('migrateConfig', () => {
     })
 
     expect(config.general.language).toBe('en')
-    expect(config.routing.frontend).toMatchObject({
+    expect(config.routing.frontend).toEqual({
       cli_tool: 'gemini-cli',
       model_id: 'custom-frontend',
-      strategy: 'fallback',
-      primary: 'gemini',
-      models: ['gemini'],
+      strategy: 'parallel',
     })
-    expect(config.routing.backend).toMatchObject({
+    expect(config.routing.backend).toEqual({
       cli_tool: 'codex',
       model_id: '',
-      strategy: 'fallback',
-      primary: 'codex',
-      models: ['codex'],
+      strategy: 'parallel',
     })
   })
 
@@ -295,14 +278,29 @@ describe('migrateConfig', () => {
 
     expect(config.general.language).toBe('zh-CN')
     expect(config.routing.frontend.cli_tool).toBe('opencode')
-    expect(config.routing.frontend.strategy).toBe('fallback')
+    expect(config.routing.frontend.strategy).toBe('parallel')
     expect(config.routing.frontend.model_id).toContain('gemini')
-    expect(config.routing.backend).toMatchObject({
+    expect(config.routing.backend).toEqual({
       cli_tool: 'codex',
       model_id: '',
-      strategy: 'fallback',
+      strategy: 'parallel',
     })
     expect(config.routing.mode).toBe('smart')
+  })
+
+  // M2: 旧配置中的 review.models 不会导致迁移失败
+  it('gracefully handles legacy review.models without error', () => {
+    const config = migrateConfig({
+      routing: {
+        frontend: { cli_tool: 'opencode' },
+        backend: { cli_tool: 'codex' },
+        review: { strategy: 'parallel', models: ['codex', 'gemini'] },
+      },
+    })
+
+    // review 输出只包含 strategy，不含 models
+    expect(config.routing.review).toEqual({ strategy: 'parallel' })
+    expect(config.routing.review).not.toHaveProperty('models')
   })
 })
 
@@ -312,12 +310,12 @@ describe('createDefaultRouting', () => {
       frontend: {
         cli_tool: 'opencode',
         model_id: 'antigravity/gemini-3-pro-high',
-        strategy: 'fallback',
+        strategy: 'parallel',
       },
       backend: {
         cli_tool: 'codex',
         model_id: '',
-        strategy: 'fallback',
+        strategy: 'parallel',
       },
       review: {
         strategy: 'parallel',
@@ -344,24 +342,17 @@ describe('createDefaultConfig', () => {
 
     expect(config.general.language).toBe('en')
     expect(isValidIsoDate(config.general.createdAt)).toBe(true)
-    expect(config.routing.frontend).toMatchObject({
+    expect(config.routing.frontend).toEqual({
       cli_tool: 'opencode',
       model_id: 'frontend-x',
       strategy: 'round-robin',
-      primary: 'gemini',
-      models: ['gemini'],
     })
-    expect(config.routing.backend).toMatchObject({
+    expect(config.routing.backend).toEqual({
       cli_tool: 'codex',
       model_id: 'backend-x',
       strategy: 'parallel',
-      primary: 'codex',
-      models: ['codex'],
     })
-    expect(config.routing.review).toEqual({
-      strategy: 'parallel',
-      models: ['gemini', 'codex'],
-    })
+    expect(config.routing.review).toEqual({ strategy: 'parallel' })
     expect(config.routing.mode).toBe('sequential')
     expect(config.workflows.installed).toEqual(['frontend', 'review'])
     expect(config.mcp.provider).toBe('custom-provider')
@@ -377,17 +368,15 @@ describe('createDefaultConfig', () => {
 
     expect(config.mcp.provider).toBe('ace-tool')
     expect(config.performance?.liteMode).toBe(false)
-    expect(config.routing.frontend).toMatchObject({
+    expect(config.routing.frontend).toEqual({
       cli_tool: 'opencode',
-      strategy: 'fallback',
-      primary: 'gemini',
-      models: ['gemini'],
+      model_id: 'antigravity/gemini-3-pro-high',
+      strategy: 'parallel',
     })
-    expect(config.routing.backend).toMatchObject({
+    expect(config.routing.backend).toEqual({
       cli_tool: 'codex',
-      strategy: 'fallback',
-      primary: 'codex',
-      models: ['codex'],
+      model_id: '',
+      strategy: 'parallel',
     })
     expect(config.routing.mode).toBe('smart')
   })

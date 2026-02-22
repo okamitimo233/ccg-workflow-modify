@@ -1,4 +1,4 @@
-import type { CliTool, ModelRouting, ModelType } from '../types'
+import type { CliTool, ModelRouting } from '../types'
 import ansis from 'ansis'
 import { exec } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -6,7 +6,7 @@ import inquirer from 'inquirer'
 import ora from 'ora'
 import { homedir } from 'node:os'
 import { join } from 'pathe'
-import { checkForUpdates, compareVersions } from '../utils/version'
+import { checkForUpdates, compareVersions, detectInstallSource, getGitHubUpdateCommand } from '../utils/version'
 import { uninstallWorkflows } from '../utils/installer'
 import { readCcgConfig, writeCcgConfig } from '../utils/config'
 import { migrateToV1_4_0, needsMigration } from '../utils/migration'
@@ -25,7 +25,7 @@ export async function update(): Promise<void> {
   const spinner = ora('正在检查最新版本...').start()
 
   try {
-    const { hasUpdate, currentVersion, latestVersion } = await checkForUpdates()
+    const { hasUpdate, currentVersion, latestVersion, installSource } = await checkForUpdates()
 
     // Check if local workflow version differs from running version
     const config = await readCcgConfig()
@@ -35,20 +35,22 @@ export async function update(): Promise<void> {
     spinner.stop()
 
     if (!latestVersion) {
-      console.log(ansis.red('❌ 无法连接到 npm registry，请检查网络连接'))
+      const sourceHint = installSource === 'github'
+        ? '无法连接到 GitHub，请检查网络连接或 gh CLI 是否可用'
+        : '无法连接到 npm registry，请检查网络连接'
+      console.log(ansis.red(`❌ ${sourceHint}`))
       return
     }
 
     console.log(`当前版本: ${ansis.yellow(`v${currentVersion}`)}`)
     console.log(`最新版本: ${ansis.green(`v${latestVersion}`)}`)
+    console.log(`安装来源: ${ansis.gray(installSource)}`)
     if (localVersion !== '0.0.0') {
       console.log(`本地工作流: ${ansis.gray(`v${localVersion}`)}`)
     }
     console.log()
 
     // Determine effective update status
-    // hasUpdate: npm registry has newer version
-    // needsWorkflowUpdate: local workflows are older than running version
     const effectiveNeedsUpdate = hasUpdate || needsWorkflowUpdate
     let defaultConfirm = effectiveNeedsUpdate
 
@@ -80,7 +82,7 @@ export async function update(): Promise<void> {
 
     // Pass localVersion as fromVersion for accurate display
     const fromVersion = needsWorkflowUpdate ? localVersion : currentVersion
-    await performUpdate(fromVersion, latestVersion || currentVersion, hasUpdate || needsWorkflowUpdate)
+    await performUpdate(fromVersion, latestVersion || currentVersion, hasUpdate || needsWorkflowUpdate, installSource)
   }
   catch (error) {
     spinner.stop()
@@ -98,8 +100,8 @@ async function askReconfigureRouting(currentRouting?: ModelRouting): Promise<Mod
 
   if (currentRouting) {
     console.log(ansis.gray('当前配置:'))
-    const frontendLabel = currentRouting.frontend.cli_tool || currentRouting.frontend.models?.[0] || 'opencode'
-    const backendLabel = currentRouting.backend.cli_tool || currentRouting.backend.models?.[0] || 'codex'
+    const frontendLabel = currentRouting.frontend.cli_tool || 'opencode'
+    const backendLabel = currentRouting.backend.cli_tool || 'codex'
     console.log(`  ${ansis.cyan('前端工具:')} ${ansis.green(frontendLabel)}`)
     console.log(`  ${ansis.cyan('后端工具:')} ${ansis.blue(backendLabel)}`)
     console.log()
@@ -118,57 +120,48 @@ async function askReconfigureRouting(currentRouting?: ModelRouting): Promise<Mod
 
   console.log()
 
-  // Frontend models selection
+  // Frontend tool selection
   const { selectedFrontend } = await inquirer.prompt([{
     type: 'checkbox',
     name: 'selectedFrontend',
     message: i18n.t('init:selectFrontendModels'),
     choices: [
-      { name: 'Gemini', value: 'gemini' as ModelType, checked: currentRouting?.frontend.models?.includes('gemini') ?? true },
-      { name: 'Claude', value: 'claude' as ModelType, checked: currentRouting?.frontend.models?.includes('claude') ?? false },
-      { name: 'Codex', value: 'codex' as ModelType, checked: currentRouting?.frontend.models?.includes('codex') ?? false },
+      { name: 'Gemini (opencode)', value: 'opencode' as CliTool, checked: currentRouting?.frontend.cli_tool === 'opencode' },
+      { name: 'Codex', value: 'codex' as CliTool, checked: currentRouting?.frontend.cli_tool === 'codex' },
+      { name: 'Gemini CLI', value: 'gemini-cli' as CliTool, checked: currentRouting?.frontend.cli_tool === 'gemini-cli' },
     ],
     validate: (answer: string[]) => answer.length > 0 || i18n.t('init:validation.selectAtLeastOne'),
   }])
 
-  // Backend models selection
+  // Backend tool selection
   const { selectedBackend } = await inquirer.prompt([{
     type: 'checkbox',
     name: 'selectedBackend',
     message: i18n.t('init:selectBackendModels'),
     choices: [
-      { name: 'Codex', value: 'codex' as ModelType, checked: currentRouting?.backend.models?.includes('codex') ?? true },
-      { name: 'Gemini', value: 'gemini' as ModelType, checked: currentRouting?.backend.models?.includes('gemini') ?? false },
-      { name: 'Claude', value: 'claude' as ModelType, checked: currentRouting?.backend.models?.includes('claude') ?? false },
+      { name: 'Codex', value: 'codex' as CliTool, checked: currentRouting?.backend.cli_tool === 'codex' },
+      { name: 'Gemini (opencode)', value: 'opencode' as CliTool, checked: currentRouting?.backend.cli_tool === 'opencode' },
+      { name: 'Gemini CLI', value: 'gemini-cli' as CliTool, checked: currentRouting?.backend.cli_tool === 'gemini-cli' },
     ],
     validate: (answer: string[]) => answer.length > 0 || i18n.t('init:validation.selectAtLeastOne'),
   }])
 
-  const frontendModels = selectedFrontend as ModelType[]
-  const backendModels = selectedBackend as ModelType[]
-
-  // 映射模型选择到 CLI 工具
-  const frontendCliTool: CliTool = frontendModels.includes('codex') ? 'codex' : 'opencode'
-  const backendCliTool: CliTool = backendModels.includes('codex') ? 'codex' : 'opencode'
+  const frontendCliTool: CliTool = (selectedFrontend as CliTool[])[0] || 'opencode'
+  const backendCliTool: CliTool = (selectedBackend as CliTool[])[0] || 'codex'
 
   // Build new routing config
   const newRouting: ModelRouting = {
     frontend: {
       cli_tool: frontendCliTool,
       model_id: frontendCliTool === 'opencode' ? 'antigravity/gemini-3-pro-high' : '',
-      models: frontendModels,
-      primary: frontendModels[0],
-      strategy: frontendModels.length > 1 ? 'parallel' : 'fallback',
+      strategy: 'parallel',
     },
     backend: {
       cli_tool: backendCliTool,
       model_id: '',
-      models: backendModels,
-      primary: backendModels[0],
-      strategy: backendModels.length > 1 ? 'parallel' : 'fallback',
+      strategy: 'parallel',
     },
     review: {
-      models: [...new Set([...frontendModels, ...backendModels])],
       strategy: 'parallel',
     },
     mode: currentRouting?.mode || 'smart',
@@ -176,8 +169,8 @@ async function askReconfigureRouting(currentRouting?: ModelRouting): Promise<Mod
 
   console.log()
   console.log(ansis.green('✓ 新配置:'))
-  console.log(`  ${ansis.cyan('前端模型:')} ${frontendModels.map(m => ansis.green(m)).join(', ')}`)
-  console.log(`  ${ansis.cyan('后端模型:')} ${backendModels.map(m => ansis.blue(m)).join(', ')}`)
+  console.log(`  ${ansis.cyan('前端工具:')} ${ansis.green(frontendCliTool)}`)
+  console.log(`  ${ansis.cyan('后端工具:')} ${ansis.blue(backendCliTool)}`)
   console.log()
 
   return newRouting
@@ -197,9 +190,24 @@ async function checkIfGlobalInstall(): Promise<boolean> {
 }
 
 /**
+ * Build the npx command based on install source
+ */
+function buildNpxCommand(installSource: 'npm' | 'github', args: string): string {
+  if (installSource === 'github') {
+    return `${getGitHubUpdateCommand()} ${args}`
+  }
+  return `npx --yes ccg-workflow-modify@latest ${args}`
+}
+
+/**
  * Perform the actual update process
  */
-async function performUpdate(fromVersion: string, toVersion: string, isNewVersion: boolean): Promise<void> {
+async function performUpdate(
+  fromVersion: string,
+  toVersion: string,
+  isNewVersion: boolean,
+  installSource: 'npm' | 'github' = detectInstallSource(),
+): Promise<void> {
   console.log()
   console.log(ansis.yellow.bold('⚙️  开始更新...'))
   console.log()
@@ -221,7 +229,14 @@ async function performUpdate(fromVersion: string, toVersion: string, isNewVersio
     console.log()
     console.log('推荐的更新方式：')
     console.log()
-    console.log(ansis.cyan('  npm install -g ccg-workflow-modify@latest'))
+
+    if (installSource === 'github') {
+      console.log(ansis.cyan(`  npm install -g github:okamitimo233/ccg-workflow-modify`))
+    }
+    else {
+      console.log(ansis.cyan('  npm install -g ccg-workflow-modify@latest'))
+    }
+
     console.log()
     console.log(ansis.gray('这将同时更新命令和工作流文件'))
     console.log()
@@ -237,7 +252,14 @@ async function performUpdate(fromVersion: string, toVersion: string, isNewVersio
       console.log()
       console.log(ansis.cyan('请在新的终端窗口中运行：'))
       console.log()
-      console.log(ansis.cyan.bold('  npm install -g ccg-workflow-modify@latest'))
+
+      if (installSource === 'github') {
+        console.log(ansis.cyan.bold('  npm install -g github:okamitimo233/ccg-workflow-modify'))
+      }
+      else {
+        console.log(ansis.cyan.bold('  npm install -g ccg-workflow-modify@latest'))
+      }
+
       console.log()
       console.log(ansis.gray('(运行完成后，当前版本将自动更新)'))
       console.log()
@@ -255,15 +277,12 @@ async function performUpdate(fromVersion: string, toVersion: string, isNewVersio
 
   try {
     // Clear npx cache first to ensure we get the latest version
-    // This is especially important on Windows where npx caching can be aggressive
     if (process.platform === 'win32') {
       spinner.text = '正在清理 npx 缓存...'
       try {
-        // Try to clear npx cache on Windows
         await execAsync('npx clear-npx-cache', { timeout: 10000 })
       }
       catch {
-        // If clear-npx-cache doesn't work, manually remove cache directory
         const npxCachePath = join(homedir(), '.npm', '_npx')
         try {
           const fs = await import('fs-extra')
@@ -276,13 +295,30 @@ async function performUpdate(fromVersion: string, toVersion: string, isNewVersio
     }
 
     spinner.text = '正在下载最新版本...'
-    // Download latest package using npx with --yes flag
-    await execAsync(`npx --yes ccg-workflow-modify@latest --version`, { timeout: 60000 })
+    // C1: 按安装源分流下载命令
+    const versionCheckCmd = buildNpxCommand(installSource, '--version')
+    await execAsync(versionCheckCmd, { timeout: 60000 })
     spinner.succeed('最新版本下载完成')
   }
   catch (error) {
     spinner.fail('下载最新版本失败')
     console.log(ansis.red(`错误: ${error}`))
+
+    // C1.5: 区分错误提示
+    if (installSource === 'github') {
+      console.log()
+      console.log(ansis.yellow('提示: GitHub 安装源下载失败，可能原因:'))
+      console.log(ansis.gray('  • 网络无法访问 GitHub'))
+      console.log(ansis.gray('  • 仓库不存在或分支名错误'))
+      console.log(ansis.gray(`  • 请尝试手动运行: ${getGitHubUpdateCommand()}`))
+    }
+    else {
+      console.log()
+      console.log(ansis.yellow('提示: npm 源下载失败，可能原因:'))
+      console.log(ansis.gray('  • 包尚未发布到 npm registry'))
+      console.log(ansis.gray('  • 网络无法访问 npm registry'))
+      console.log(ansis.gray(`  • 请尝试 GitHub 安装: ${getGitHubUpdateCommand()}`))
+    }
     return
   }
 
@@ -317,8 +353,6 @@ async function performUpdate(fromVersion: string, toVersion: string, isNewVersio
   }
 
   // Step 3: Delete old workflows first
-  // IMPORTANT: We must uninstall first, then let the new version install itself
-  // This avoids the issue where the old version's PACKAGE_ROOT doesn't have new binaries
   spinner = ora('正在删除旧工作流...').start()
 
   try {
@@ -339,19 +373,17 @@ async function performUpdate(fromVersion: string, toVersion: string, isNewVersio
     spinner.warn(`删除旧工作流时出错: ${error}，继续安装...`)
   }
 
-  // Step 4: Install new workflows using the latest version via npx
-  // This ensures we use the new version's binary files
+  // Step 4: Install new workflows using the latest version
+  // C1: 按安装源分流 init 命令
   spinner = ora('正在安装新版本工作流和二进制...').start()
 
   try {
-    // Use npx to run the latest version's init command with --force flag
-    // This ensures the new version's PACKAGE_ROOT is used for binary installation
-    // Note: --skip-prompt preserves existing liteMode setting without asking
-    await execAsync(`npx --yes ccg-workflow-modify@latest init --force --skip-mcp --skip-prompt`, {
+    const initCmd = buildNpxCommand(installSource, 'init --force --skip-mcp --skip-prompt')
+    await execAsync(initCmd, {
       timeout: 120000,
       env: {
         ...process.env,
-        CCG_UPDATE_MODE: 'true', // Signal to init that this is an update
+        CCG_UPDATE_MODE: 'true',
       },
     })
     spinner.succeed('新版本安装成功')
@@ -370,8 +402,16 @@ async function performUpdate(fromVersion: string, toVersion: string, isNewVersio
     spinner.fail('安装新版本失败')
     console.log(ansis.red(`错误: ${error}`))
     console.log()
-    console.log(ansis.yellow('请尝试手动运行:'))
-    console.log(ansis.cyan('  npx ccg-workflow-modify@latest'))
+
+    // C1.5: 按安装源提供恢复建议
+    if (installSource === 'github') {
+      console.log(ansis.yellow('请尝试手动运行:'))
+      console.log(ansis.cyan(`  ${getGitHubUpdateCommand()}`))
+    }
+    else {
+      console.log(ansis.yellow('请尝试手动运行:'))
+      console.log(ansis.cyan('  npx ccg-workflow-modify@latest'))
+    }
     return
   }
 

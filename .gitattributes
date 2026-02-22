@@ -1,0 +1,9 @@
+# Auto-generated files — mark as generated for diff/stats
+dist/** -diff linguist-generated
+
+# Ensure consistent line endings for shell scripts
+*.sh text eol=lf
+bin/ccg.mjs text eol=lf
+
+# Binary files
+bin/codeagent-wrapper-* binary

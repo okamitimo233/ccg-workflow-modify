@@ -1,4 +1,4 @@
-import type { AceToolConfig, InstallResult, WorkflowConfig } from '../types'
+import type { AceToolConfig, CliTool, InstallResult, WorkflowConfig } from '../types'
 import { homedir } from 'node:os'
 import fs from 'fs-extra'
 import { fileURLToPath } from 'node:url'
@@ -386,9 +386,9 @@ export function getWorkflowPreset(preset: WorkflowPreset): string[] {
 function injectConfigVariables(content: string, config: {
   routing?: {
     mode?: string
-    frontend?: { models?: string[], primary?: string }
-    backend?: { models?: string[], primary?: string }
-    review?: { models?: string[] }
+    frontend?: { cli_tool?: CliTool, model_id?: string, strategy?: string }
+    backend?: { cli_tool?: CliTool, model_id?: string, strategy?: string }
+    review?: { strategy?: string }
   }
   liteMode?: boolean
   mcpProvider?: string
@@ -398,20 +398,22 @@ function injectConfigVariables(content: string, config: {
   // Model routing injection
   const routing = config.routing || {}
 
-  // Frontend models
-  const frontendModels = routing.frontend?.models || ['gemini']
-  const frontendPrimary = routing.frontend?.primary || 'gemini'
+  // Frontend — 从 cli_tool 推导 legacy model name（仅用于模板注入）
+  const frontendCliTool = routing.frontend?.cli_tool || 'opencode'
+  const frontendPrimary = frontendCliTool === 'codex' ? 'codex' : 'gemini'
+  const frontendModels = [frontendPrimary]
   processed = processed.replace(/\{\{FRONTEND_MODELS\}\}/g, JSON.stringify(frontendModels))
   processed = processed.replace(/\{\{FRONTEND_PRIMARY\}\}/g, frontendPrimary)
 
-  // Backend models
-  const backendModels = routing.backend?.models || ['codex']
-  const backendPrimary = routing.backend?.primary || 'codex'
+  // Backend — 同理
+  const backendCliTool = routing.backend?.cli_tool || 'codex'
+  const backendPrimary = backendCliTool === 'codex' ? 'codex' : 'gemini'
+  const backendModels = [backendPrimary]
   processed = processed.replace(/\{\{BACKEND_MODELS\}\}/g, JSON.stringify(backendModels))
   processed = processed.replace(/\{\{BACKEND_PRIMARY\}\}/g, backendPrimary)
 
-  // Review models
-  const reviewModels = routing.review?.models || ['codex', 'gemini']
+  // Review — 从 frontend/backend 推导
+  const reviewModels = [...new Set([frontendPrimary, backendPrimary])]
   processed = processed.replace(/\{\{REVIEW_MODELS\}\}/g, JSON.stringify(reviewModels))
 
   // Routing mode
@@ -524,9 +526,9 @@ export async function installWorkflows(
   config?: {
     routing?: {
       mode?: string
-      frontend?: { models?: string[], primary?: string }
-      backend?: { models?: string[], primary?: string }
-      review?: { models?: string[] }
+      frontend?: { cli_tool?: CliTool, model_id?: string, strategy?: string }
+      backend?: { cli_tool?: CliTool, model_id?: string, strategy?: string }
+      review?: { strategy?: string }
     }
     liteMode?: boolean
     mcpProvider?: string
@@ -536,9 +538,9 @@ export async function installWorkflows(
   const installConfig = {
     routing: config?.routing || {
       mode: 'smart',
-      frontend: { models: ['gemini'], primary: 'gemini' },
-      backend: { models: ['codex'], primary: 'codex' },
-      review: { models: ['codex', 'gemini'] },
+      frontend: { cli_tool: 'opencode' as CliTool, model_id: 'antigravity/gemini-3-pro-high', strategy: 'parallel' },
+      backend: { cli_tool: 'codex' as CliTool, model_id: '', strategy: 'parallel' },
+      review: { strategy: 'parallel' },
     },
     liteMode: config?.liteMode || false,
     mcpProvider: config?.mcpProvider || 'ace-tool',

@@ -16,19 +16,30 @@ export type RoutingStrategy = 'parallel' | 'fallback' | 'round-robin'
 
 // 路由目标配置（前端/后端）
 export interface RoutingTarget {
-  cli_tool?: CliTool
-  model_id?: string
+  cli_tool: CliTool
+  model_id: string
   strategy: RoutingStrategy
-  /** @deprecated 使用 cli_tool 替代 */
-  models?: ModelType[]
-  /** @deprecated 使用 cli_tool 替代 */
-  primary?: ModelType
 }
 
 // Review 路由配置
 export interface ReviewRouting {
   strategy: 'parallel'
-  /** @deprecated 保留向后兼容 */
+}
+
+// 旧格式路由目标（仅用于 migration 边界内）
+/** @internal 仅在 migrateRoutingTarget / migrateRouting 内使用 */
+export interface LegacyRoutingTarget {
+  cli_tool?: CliTool
+  model_id?: string
+  strategy?: RoutingStrategy
+  models?: ModelType[]
+  primary?: ModelType
+}
+
+// 旧格式 Review 路由
+/** @internal */
+export interface LegacyReviewRouting {
+  strategy?: string
   models?: ModelType[]
 }
 

@@ -1,4 +1,4 @@
-export { c as changeLanguage, a as checkForUpdates, b as compareVersions, d as createDefaultConfig, e as createDefaultRouting, g as getCcgDir, f as getConfigPath, h as getCurrentVersion, i as getLatestVersion, j as getWorkflowById, k as getWorkflowConfigs, l as i18n, m as init, n as initI18n, o as installAceTool, p as installAceToolRs, q as installWorkflows, r as migrateConfig, s as migrateToV1_4_0, t as needsMigration, u as readCcgConfig, v as showMainMenu, w as uninstallAceTool, x as uninstallWorkflows, y as update, z as writeCcgConfig } from './shared/ccg-workflow-modify.CM0XzahC.mjs';
+export { c as changeLanguage, a as checkForUpdates, b as compareVersions, d as createDefaultConfig, e as createDefaultRouting, g as getCcgDir, f as getConfigPath, h as getCurrentVersion, i as getLatestVersion, j as getWorkflowById, k as getWorkflowConfigs, l as i18n, m as init, n as initI18n, o as installAceTool, p as installAceToolRs, q as installWorkflows, r as migrateConfig, s as migrateToV1_4_0, t as needsMigration, u as readCcgConfig, v as showMainMenu, w as uninstallAceTool, x as uninstallWorkflows, y as update, z as writeCcgConfig } from './shared/ccg-workflow-modify.Cubnrd2p.mjs';
 import 'ansis';
 import 'inquirer';
 import 'node:child_process';
@@ -10,3 +10,4 @@ import 'fs-extra';
 import 'i18next';
 import 'ora';
 import 'smol-toml';
+import 'semver';

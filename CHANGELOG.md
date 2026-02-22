@@ -7,6 +7,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0-alpha.1] - 2026-02-22 ⚡ BREAKING CHANGES
+
+### 🏗️ 重构：配置类型系统
+
+**重大变更**：重构路由配置类型系统，引入 `CliTool` 类型替代旧的 `ModelType`。
+
+#### Breaking Changes
+
+- `RoutingTarget` 接口移除 `models` 和 `primary` 字段，仅保留 `cli_tool`/`model_id`/`strategy`
+- `ReviewRouting` 接口移除 `models` 字段
+- `createDefaultRouting()` 的 `strategy` 默认值恢复为 `'parallel'`（从 `'fallback'` 回退）
+- 版本比较函数改用 `semver` 库，支持 prerelease 语义
+
+#### ✨ 新功能
+
+**C1. update 命令适配 GitHub 直装模式**
+
+- 新增 `detectInstallSource()` 函数，根据 `_resolved`/`_from`/路径特征判断安装来源（npm 或 github）
+- `getLatestVersion()` 按安装源自动选择获取方式：npm → `npm view`，GitHub → `gh api` + `curl` 回退
+- `performUpdate()` 按安装源分流下载命令和 `init --force` 命令
+- 错误提示区分 GitHub 不可达 vs npm 未发布
+
+**M1. 版本比较函数支持 prerelease 语义**
+
+- 添加 `semver` 依赖，替换自定义 `compareVersions()` 为 `semver.compare()`
+- 支持 `2.0.0-alpha.1 < 2.0.0`、`2.0.0-alpha.2 > 2.0.0-alpha.1` 等语义比较
+
+#### 🔄 变更
+
+**C2. strategy 默认值恢复**
+
+- `createDefaultRouting()` 的 frontend/backend `strategy` 恢复为 `'parallel'`
+- `migrateRoutingTarget()` 默认 strategy 回退值从 `'fallback'` 恢复为 `'parallel'`
+- `init.ts` 中 frontend/backend strategy 恢复为 `'parallel'`
+
+**M3. init.ts 产出新格式路由对象**
+
+- 重构 `init.ts` 路由构建逻辑，直接产出 `{ cli_tool, model_id, strategy }` 新格式
+- 移除对 `models`/`primary` 旧字段的构建
+
+**M4. 核心接口清理 deprecated 字段**
+
+- `RoutingTarget` 移除 `models` 和 `primary` 字段
+- `ReviewRouting` 移除 `models` 字段
+- 新增 `LegacyRoutingTarget`/`LegacyReviewRouting`（仅在 migration 逻辑内使用）
+- `update.ts` 移除 `models?.` 可选链，直接使用 `cli_tool`
+- `installer.ts` 更新参数类型，从 `cli_tool` 推导模板变量
+
+**m2. dist/ 纳入 git 跟踪防护**
+
+- 添加 `.gitattributes`，固定 `dist/` 行尾格式（`dist/** -diff linguist-generated`）
+
+**m3. update.ts 可选链冗余清理**
+
+- 简化 `askReconfigureRouting()` 显示逻辑，移除 `|| models?.[0]` 备用逻辑
+
+#### 🧪 测试
+
+- 新增 `version.test.ts`（8 tests）：`compareVersions` prerelease 语义 + `detectInstallSource` 来源检测
+- 新增 `config.test.ts` 迁移测试（22 tests）：旧格式 `review.models` 不导致迁移失败 + 全面覆盖
+- 全部 30 tests / 2 test files 通过
+- `pnpm typecheck` 通过
+- `pnpm build` 通过
+
+#### 修改文件
+
+- `src/types/index.ts` - 类型重构
+- `src/utils/config.ts` - 迁移逻辑和默认值修正
+- `src/utils/version.ts` - GitHub 安装源支持 + semver 替换
+- `src/commands/update.ts` - 按安装源分流
+- `src/commands/init.ts` - 路由构建新格式
+- `src/utils/installer.ts` - 类型适配
+- `package.json` - 添加 semver 依赖，版本号升至 2.0.0-alpha.1
+- `.gitattributes` - 新增 dist/ 防护
+
+---
+
 ## [1.7.61] - 2026-02-10
 
 ### 🐛 修复

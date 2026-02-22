@@ -9,6 +9,7 @@ import fs from 'fs-extra';
 import i18next from 'i18next';
 import ora from 'ora';
 import { parse, stringify } from 'smol-toml';
+import semver from 'semver';
 
 const version = "2.0.0-alpha.1";
 
@@ -474,15 +475,17 @@ function getAllCommandIds() {
 function injectConfigVariables(content, config) {
   let processed = content;
   const routing = config.routing || {};
-  const frontendModels = routing.frontend?.models || ["gemini"];
-  const frontendPrimary = routing.frontend?.primary || "gemini";
+  const frontendCliTool = routing.frontend?.cli_tool || "opencode";
+  const frontendPrimary = frontendCliTool === "codex" ? "codex" : "gemini";
+  const frontendModels = [frontendPrimary];
   processed = processed.replace(/\{\{FRONTEND_MODELS\}\}/g, JSON.stringify(frontendModels));
   processed = processed.replace(/\{\{FRONTEND_PRIMARY\}\}/g, frontendPrimary);
-  const backendModels = routing.backend?.models || ["codex"];
-  const backendPrimary = routing.backend?.primary || "codex";
+  const backendCliTool = routing.backend?.cli_tool || "codex";
+  const backendPrimary = backendCliTool === "codex" ? "codex" : "gemini";
+  const backendModels = [backendPrimary];
   processed = processed.replace(/\{\{BACKEND_MODELS\}\}/g, JSON.stringify(backendModels));
   processed = processed.replace(/\{\{BACKEND_PRIMARY\}\}/g, backendPrimary);
-  const reviewModels = routing.review?.models || ["codex", "gemini"];
+  const reviewModels = [.../* @__PURE__ */ new Set([frontendPrimary, backendPrimary])];
   processed = processed.replace(/\{\{REVIEW_MODELS\}\}/g, JSON.stringify(reviewModels));
   const routingMode = routing.mode || "smart";
   processed = processed.replace(/\{\{ROUTING_MODE\}\}/g, routingMode);
@@ -518,9 +521,9 @@ async function installWorkflows(workflowIds, installDir, force = false, config) 
   const installConfig = {
     routing: config?.routing || {
       mode: "smart",
-      frontend: { models: ["gemini"], primary: "gemini" },
-      backend: { models: ["codex"], primary: "codex" },
-      review: { models: ["codex", "gemini"] }
+      frontend: { cli_tool: "opencode", model_id: "antigravity/gemini-3-pro-high", strategy: "parallel" },
+      backend: { cli_tool: "codex", model_id: "", strategy: "parallel" },
+      review: { strategy: "parallel" }
     },
     liteMode: config?.liteMode || false,
     mcpProvider: config?.mcpProvider || "ace-tool"
@@ -1600,10 +1603,6 @@ function mapLegacyModelToCliTool(model, area) {
   if (model === "gemini") return "opencode";
   return area === "backend" ? "codex" : "opencode";
 }
-function cliToolToLegacyModel(cliTool) {
-  if (cliTool === "codex") return "codex";
-  return "gemini";
-}
 function migrateRoutingTarget(raw, area) {
   const target = isRecord(raw) ? raw : {};
   const defaultCliTool = area === "backend" ? "codex" : "opencode";
@@ -1612,22 +1611,17 @@ function migrateRoutingTarget(raw, area) {
   const legacyPrimary = isModelType(target.primary) ? target.primary : void 0;
   const cli_tool = isCliTool(target.cli_tool) ? target.cli_tool : legacyPrimary ? mapLegacyModelToCliTool(legacyPrimary, area) : legacyModels[0] ? mapLegacyModelToCliTool(legacyModels[0], area) : defaultCliTool;
   const model_id = typeof target.model_id === "string" ? target.model_id : defaultModelId;
-  const strategy = isRoutingStrategy(target.strategy) ? target.strategy : "fallback";
-  const compatModel = cliToolToLegacyModel(cli_tool);
-  return { cli_tool, model_id, strategy, models: [compatModel], primary: compatModel };
+  const strategy = isRoutingStrategy(target.strategy) ? target.strategy : "parallel";
+  return { cli_tool, model_id, strategy };
 }
 function migrateRouting(raw) {
   const routing = isRecord(raw) ? raw : {};
   const frontend = migrateRoutingTarget(routing.frontend, "frontend");
   const backend = migrateRoutingTarget(routing.backend, "backend");
-  const reviewModels = [.../* @__PURE__ */ new Set([
-    frontend.primary || "gemini",
-    backend.primary || "codex"
-  ])];
   return {
     frontend,
     backend,
-    review: { strategy: "parallel", models: reviewModels },
+    review: { strategy: "parallel" },
     mode: isCollaborationMode(routing.mode) ? routing.mode : "smart"
   };
 }
@@ -1782,12 +1776,12 @@ function createDefaultRouting() {
     frontend: {
       cli_tool: "opencode",
       model_id: DEFAULT_FRONTEND_MODEL_ID,
-      strategy: "fallback"
+      strategy: "parallel"
     },
     backend: {
       cli_tool: "codex",
       model_id: "",
-      strategy: "fallback"
+      strategy: "parallel"
     },
     review: {
       strategy: "parallel"
@@ -1885,8 +1879,6 @@ async function init(options = {}) {
   console.log(ansis.gray(`  \u591A\u6A21\u578B\u534F\u4F5C\u5F00\u53D1\u5DE5\u4F5C\u6D41`));
   console.log();
   const language = "zh-CN";
-  const frontendModels = ["gemini"];
-  const backendModels = ["codex"];
   const mode = "smart";
   const selectedWorkflows = getAllCommandIds();
   let liteMode = false;
@@ -2067,17 +2059,16 @@ async function init(options = {}) {
   }
   const routing = {
     frontend: {
-      models: frontendModels,
-      primary: "gemini",
-      strategy: "fallback"
+      cli_tool: "opencode",
+      model_id: "antigravity/gemini-3-pro-high",
+      strategy: "parallel"
     },
     backend: {
-      models: backendModels,
-      primary: "codex",
-      strategy: "fallback"
+      cli_tool: "codex",
+      model_id: "",
+      strategy: "parallel"
     },
     review: {
-      models: ["codex", "gemini"],
       strategy: "parallel"
     },
     mode
@@ -2333,6 +2324,9 @@ ${exportCommand}
 const execAsync$2 = promisify(exec);
 const __filename$1 = fileURLToPath(import.meta.url);
 const __dirname$1 = dirname(__filename$1);
+const GITHUB_OWNER = "okamitimo233";
+const GITHUB_REPO = "ccg-workflow-modify";
+const GITHUB_DEFAULT_BRANCH = "main";
 function findPackageRoot(startDir) {
   let dir = startDir;
   for (let i = 0; i < 5; i++) {
@@ -2344,6 +2338,34 @@ function findPackageRoot(startDir) {
   return startDir;
 }
 const PACKAGE_ROOT = findPackageRoot(__dirname$1);
+function detectInstallSource(packageRoot) {
+  const root = PACKAGE_ROOT;
+  try {
+    const pkgPath = join(root, "package.json");
+    if (fs.existsSync(pkgPath)) {
+      const pkg = fs.readJSONSync(pkgPath);
+      if (typeof pkg._resolved === "string") {
+        if (pkg._resolved.includes("registry.npmjs.org") || pkg._resolved.includes("registry.npmmirror.com")) {
+          return "npm";
+        }
+        if (pkg._resolved.includes("github.com") || pkg._resolved.includes("codeload.github.com")) {
+          return "github";
+        }
+      }
+      if (typeof pkg._from === "string") {
+        if (pkg._from.includes("github:") || pkg._from.includes("github.com")) {
+          return "github";
+        }
+      }
+    }
+    const normalizedRoot = root.replace(/\\/g, "/");
+    if (normalizedRoot.includes("/_npx/") || normalizedRoot.includes("\\_npx\\")) {
+      return "github";
+    }
+  } catch {
+  }
+  return "github";
+}
 async function getCurrentVersion() {
   try {
     const pkgPath = join(PACKAGE_ROOT, "package.json");
@@ -2353,43 +2375,69 @@ async function getCurrentVersion() {
     return "0.0.0";
   }
 }
-async function getLatestVersion(packageName = "ccg-workflow-modify") {
+async function getLatestVersion(packageName = "ccg-workflow-modify", branch = GITHUB_DEFAULT_BRANCH) {
+  const source = detectInstallSource();
+  if (source === "npm") {
+    return getLatestVersionFromNpm(packageName);
+  }
+  return getLatestVersionFromGitHub(branch);
+}
+async function getLatestVersionFromNpm(packageName) {
   try {
-    const { stdout } = await execAsync$2(`npm view ${packageName} version`);
-    return stdout.trim();
+    const { stdout } = await execAsync$2(`npm view ${packageName} version`, { timeout: 15e3 });
+    return stdout.trim() || null;
   } catch {
     return null;
   }
 }
-function compareVersions(v1, v2) {
-  const parts1 = v1.split(".").map(Number);
-  const parts2 = v2.split(".").map(Number);
-  for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
-    const num1 = parts1[i] || 0;
-    const num2 = parts2[i] || 0;
-    if (num1 > num2)
-      return 1;
-    if (num1 < num2)
-      return -1;
+async function getLatestVersionFromGitHub(branch) {
+  try {
+    const { stdout } = await execAsync$2(
+      `gh api repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/package.json?ref=${branch} --jq '.content'`,
+      { timeout: 15e3 }
+    );
+    const decoded = Buffer.from(stdout.trim(), "base64").toString("utf-8");
+    const pkg = JSON.parse(decoded);
+    return pkg.version || null;
+  } catch {
+    try {
+      const { stdout } = await execAsync$2(
+        `curl -sL "https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${branch}/package.json"`,
+        { timeout: 15e3 }
+      );
+      const pkg = JSON.parse(stdout);
+      return pkg.version || null;
+    } catch {
+      return null;
+    }
   }
-  return 0;
 }
-async function checkForUpdates() {
+function compareVersions(v1, v2) {
+  const result = semver.compare(v1, v2);
+  return result;
+}
+async function checkForUpdates(branch) {
   const currentVersion = await getCurrentVersion();
-  const latestVersion = await getLatestVersion();
+  const installSource = detectInstallSource();
+  const latestVersion = await getLatestVersion("ccg-workflow-modify", branch || GITHUB_DEFAULT_BRANCH);
   if (!latestVersion) {
     return {
       hasUpdate: false,
       currentVersion,
-      latestVersion: null
+      latestVersion: null,
+      installSource
     };
   }
   const hasUpdate = compareVersions(latestVersion, currentVersion) > 0;
   return {
     hasUpdate,
     currentVersion,
-    latestVersion
+    latestVersion,
+    installSource
   };
+}
+function getGitHubUpdateCommand(branch = GITHUB_DEFAULT_BRANCH) {
+  return `npx github:${GITHUB_OWNER}/${GITHUB_REPO}#${branch}`;
 }
 
 const execAsync$1 = promisify(exec);
@@ -2399,17 +2447,19 @@ async function update() {
   console.log();
   const spinner = ora("\u6B63\u5728\u68C0\u67E5\u6700\u65B0\u7248\u672C...").start();
   try {
-    const { hasUpdate, currentVersion, latestVersion } = await checkForUpdates();
+    const { hasUpdate, currentVersion, latestVersion, installSource } = await checkForUpdates();
     const config = await readCcgConfig();
     const localVersion = config?.general?.version || "0.0.0";
     const needsWorkflowUpdate = compareVersions(currentVersion, localVersion) > 0;
     spinner.stop();
     if (!latestVersion) {
-      console.log(ansis.red("\u274C \u65E0\u6CD5\u8FDE\u63A5\u5230 npm registry\uFF0C\u8BF7\u68C0\u67E5\u7F51\u7EDC\u8FDE\u63A5"));
+      const sourceHint = installSource === "github" ? "\u65E0\u6CD5\u8FDE\u63A5\u5230 GitHub\uFF0C\u8BF7\u68C0\u67E5\u7F51\u7EDC\u8FDE\u63A5\u6216 gh CLI \u662F\u5426\u53EF\u7528" : "\u65E0\u6CD5\u8FDE\u63A5\u5230 npm registry\uFF0C\u8BF7\u68C0\u67E5\u7F51\u7EDC\u8FDE\u63A5";
+      console.log(ansis.red(`\u274C ${sourceHint}`));
       return;
     }
     console.log(`\u5F53\u524D\u7248\u672C: ${ansis.yellow(`v${currentVersion}`)}`);
     console.log(`\u6700\u65B0\u7248\u672C: ${ansis.green(`v${latestVersion}`)}`);
+    console.log(`\u5B89\u88C5\u6765\u6E90: ${ansis.gray(installSource)}`);
     if (localVersion !== "0.0.0") {
       console.log(`\u672C\u5730\u5DE5\u4F5C\u6D41: ${ansis.gray(`v${localVersion}`)}`);
     }
@@ -2438,7 +2488,7 @@ async function update() {
       return;
     }
     const fromVersion = needsWorkflowUpdate ? localVersion : currentVersion;
-    await performUpdate(fromVersion, latestVersion || currentVersion, hasUpdate || needsWorkflowUpdate);
+    await performUpdate(fromVersion, latestVersion || currentVersion, hasUpdate || needsWorkflowUpdate, installSource);
   } catch (error) {
     spinner.stop();
     console.log(ansis.red(`\u274C \u66F4\u65B0\u5931\u8D25: ${error}`));
@@ -2452,7 +2502,13 @@ async function checkIfGlobalInstall$1() {
     return false;
   }
 }
-async function performUpdate(fromVersion, toVersion, isNewVersion) {
+function buildNpxCommand(installSource, args) {
+  if (installSource === "github") {
+    return `${getGitHubUpdateCommand()} ${args}`;
+  }
+  return `npx --yes ccg-workflow-modify@latest ${args}`;
+}
+async function performUpdate(fromVersion, toVersion, isNewVersion, installSource = detectInstallSource()) {
   console.log();
   console.log(ansis.yellow.bold("\u2699\uFE0F  \u5F00\u59CB\u66F4\u65B0..."));
   console.log();
@@ -2468,7 +2524,11 @@ async function performUpdate(fromVersion, toVersion, isNewVersion) {
     console.log();
     console.log("\u63A8\u8350\u7684\u66F4\u65B0\u65B9\u5F0F\uFF1A");
     console.log();
-    console.log(ansis.cyan("  npm install -g ccg-workflow-modify@latest"));
+    if (installSource === "github") {
+      console.log(ansis.cyan(`  npm install -g github:okamitimo233/ccg-workflow-modify`));
+    } else {
+      console.log(ansis.cyan("  npm install -g ccg-workflow-modify@latest"));
+    }
     console.log();
     console.log(ansis.gray("\u8FD9\u5C06\u540C\u65F6\u66F4\u65B0\u547D\u4EE4\u548C\u5DE5\u4F5C\u6D41\u6587\u4EF6"));
     console.log();
@@ -2482,7 +2542,11 @@ async function performUpdate(fromVersion, toVersion, isNewVersion) {
       console.log();
       console.log(ansis.cyan("\u8BF7\u5728\u65B0\u7684\u7EC8\u7AEF\u7A97\u53E3\u4E2D\u8FD0\u884C\uFF1A"));
       console.log();
-      console.log(ansis.cyan.bold("  npm install -g ccg-workflow-modify@latest"));
+      if (installSource === "github") {
+        console.log(ansis.cyan.bold("  npm install -g github:okamitimo233/ccg-workflow-modify"));
+      } else {
+        console.log(ansis.cyan.bold("  npm install -g ccg-workflow-modify@latest"));
+      }
       console.log();
       console.log(ansis.gray("(\u8FD0\u884C\u5B8C\u6210\u540E\uFF0C\u5F53\u524D\u7248\u672C\u5C06\u81EA\u52A8\u66F4\u65B0)"));
       console.log();
@@ -2509,11 +2573,25 @@ async function performUpdate(fromVersion, toVersion, isNewVersion) {
       }
     }
     spinner.text = "\u6B63\u5728\u4E0B\u8F7D\u6700\u65B0\u7248\u672C...";
-    await execAsync$1(`npx --yes ccg-workflow-modify@latest --version`, { timeout: 6e4 });
+    const versionCheckCmd = buildNpxCommand(installSource, "--version");
+    await execAsync$1(versionCheckCmd, { timeout: 6e4 });
     spinner.succeed("\u6700\u65B0\u7248\u672C\u4E0B\u8F7D\u5B8C\u6210");
   } catch (error) {
     spinner.fail("\u4E0B\u8F7D\u6700\u65B0\u7248\u672C\u5931\u8D25");
     console.log(ansis.red(`\u9519\u8BEF: ${error}`));
+    if (installSource === "github") {
+      console.log();
+      console.log(ansis.yellow("\u63D0\u793A: GitHub \u5B89\u88C5\u6E90\u4E0B\u8F7D\u5931\u8D25\uFF0C\u53EF\u80FD\u539F\u56E0:"));
+      console.log(ansis.gray("  \u2022 \u7F51\u7EDC\u65E0\u6CD5\u8BBF\u95EE GitHub"));
+      console.log(ansis.gray("  \u2022 \u4ED3\u5E93\u4E0D\u5B58\u5728\u6216\u5206\u652F\u540D\u9519\u8BEF"));
+      console.log(ansis.gray(`  \u2022 \u8BF7\u5C1D\u8BD5\u624B\u52A8\u8FD0\u884C: ${getGitHubUpdateCommand()}`));
+    } else {
+      console.log();
+      console.log(ansis.yellow("\u63D0\u793A: npm \u6E90\u4E0B\u8F7D\u5931\u8D25\uFF0C\u53EF\u80FD\u539F\u56E0:"));
+      console.log(ansis.gray("  \u2022 \u5305\u5C1A\u672A\u53D1\u5E03\u5230 npm registry"));
+      console.log(ansis.gray("  \u2022 \u7F51\u7EDC\u65E0\u6CD5\u8BBF\u95EE npm registry"));
+      console.log(ansis.gray(`  \u2022 \u8BF7\u5C1D\u8BD5 GitHub \u5B89\u88C5: ${getGitHubUpdateCommand()}`));
+    }
     return;
   }
   if (await needsMigration()) {
@@ -2559,12 +2637,12 @@ async function performUpdate(fromVersion, toVersion, isNewVersion) {
   }
   spinner = ora("\u6B63\u5728\u5B89\u88C5\u65B0\u7248\u672C\u5DE5\u4F5C\u6D41\u548C\u4E8C\u8FDB\u5236...").start();
   try {
-    await execAsync$1(`npx --yes ccg-workflow-modify@latest init --force --skip-mcp --skip-prompt`, {
+    const initCmd = buildNpxCommand(installSource, "init --force --skip-mcp --skip-prompt");
+    await execAsync$1(initCmd, {
       timeout: 12e4,
       env: {
         ...process.env,
         CCG_UPDATE_MODE: "true"
-        // Signal to init that this is an update
       }
     });
     spinner.succeed("\u65B0\u7248\u672C\u5B89\u88C5\u6210\u529F");
@@ -2580,8 +2658,13 @@ async function performUpdate(fromVersion, toVersion, isNewVersion) {
     spinner.fail("\u5B89\u88C5\u65B0\u7248\u672C\u5931\u8D25");
     console.log(ansis.red(`\u9519\u8BEF: ${error}`));
     console.log();
-    console.log(ansis.yellow("\u8BF7\u5C1D\u8BD5\u624B\u52A8\u8FD0\u884C:"));
-    console.log(ansis.cyan("  npx ccg-workflow-modify@latest"));
+    if (installSource === "github") {
+      console.log(ansis.yellow("\u8BF7\u5C1D\u8BD5\u624B\u52A8\u8FD0\u884C:"));
+      console.log(ansis.cyan(`  ${getGitHubUpdateCommand()}`));
+    } else {
+      console.log(ansis.yellow("\u8BF7\u5C1D\u8BD5\u624B\u52A8\u8FD0\u884C:"));
+      console.log(ansis.cyan("  npx ccg-workflow-modify@latest"));
+    }
     return;
   }
   console.log();

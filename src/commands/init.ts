@@ -1,4 +1,4 @@
-import type { CollaborationMode, InitOptions, ModelRouting, ModelType, SupportedLang } from '../types'
+import type { CollaborationMode, InitOptions, ModelRouting, SupportedLang } from '../types'
 import ansis from 'ansis'
 import fs from 'fs-extra'
 import inquirer from 'inquirer'
@@ -18,8 +18,6 @@ export async function init(options: InitOptions = {}): Promise<void> {
 
   // Fixed configuration
   const language: SupportedLang = 'zh-CN'
-  const frontendModels: ModelType[] = ['gemini']
-  const backendModels: ModelType[] = ['codex']
   const mode: CollaborationMode = 'smart'
   const selectedWorkflows = getAllCommandIds()
 
@@ -233,20 +231,19 @@ export async function init(options: InitOptions = {}): Promise<void> {
     }
   }
 
-  // Build routing config (fixed: Gemini frontend, Codex backend)
+  // Build routing config — 直接使用新格式 (M3: 不再构建旧格式字段)
   const routing: ModelRouting = {
     frontend: {
-      models: frontendModels,
-      primary: 'gemini',
-      strategy: 'fallback',
+      cli_tool: 'opencode',
+      model_id: 'antigravity/gemini-3-pro-high',
+      strategy: 'parallel',
     },
     backend: {
-      models: backendModels,
-      primary: 'codex',
-      strategy: 'fallback',
+      cli_tool: 'codex',
+      model_id: '',
+      strategy: 'parallel',
     },
     review: {
-      models: ['codex', 'gemini'],
       strategy: 'parallel',
     },
     mode,

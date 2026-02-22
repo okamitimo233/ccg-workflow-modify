@@ -19,17 +19,24 @@ type CliTool = 'codex' | 'gemini-cli' | 'opencode';
 type CollaborationMode = 'parallel' | 'smart' | 'sequential';
 type RoutingStrategy = 'parallel' | 'fallback' | 'round-robin';
 interface RoutingTarget {
-    cli_tool?: CliTool;
-    model_id?: string;
+    cli_tool: CliTool;
+    model_id: string;
     strategy: RoutingStrategy;
-    /** @deprecated 使用 cli_tool 替代 */
-    models?: ModelType[];
-    /** @deprecated 使用 cli_tool 替代 */
-    primary?: ModelType;
 }
 interface ReviewRouting {
     strategy: 'parallel';
-    /** @deprecated 保留向后兼容 */
+}
+/** @internal 仅在 migrateRoutingTarget / migrateRouting 内使用 */
+interface LegacyRoutingTarget {
+    cli_tool?: CliTool;
+    model_id?: string;
+    strategy?: RoutingStrategy;
+    models?: ModelType[];
+    primary?: ModelType;
+}
+/** @internal */
+interface LegacyReviewRouting {
+    strategy?: string;
     models?: ModelType[];
 }
 interface CliToolConfig {
@@ -149,15 +156,17 @@ declare function installWorkflows(workflowIds: string[], installDir: string, for
     routing?: {
         mode?: string;
         frontend?: {
-            models?: string[];
-            primary?: string;
+            cli_tool?: CliTool;
+            model_id?: string;
+            strategy?: string;
         };
         backend?: {
-            models?: string[];
-            primary?: string;
+            cli_tool?: CliTool;
+            model_id?: string;
+            strategy?: string;
         };
         review?: {
-            models?: string[];
+            strategy?: string;
         };
     };
     liteMode?: boolean;
@@ -230,22 +239,26 @@ declare function needsMigration(): Promise<boolean>;
  */
 declare function getCurrentVersion(): Promise<string>;
 /**
- * Get latest version from npm registry
+ * Get latest version — 根据安装源自动选择获取方式
+ *
+ * - npm 安装：通过 `npm view` 查询 registry
+ * - GitHub 安装：通过 GitHub API 读取远程 package.json 中的 version
  */
-declare function getLatestVersion(packageName?: string): Promise<string | null>;
+declare function getLatestVersion(packageName?: string, branch?: string): Promise<string | null>;
 /**
- * Compare two semantic versions
+ * Compare two semantic versions (supports prerelease tags)
  * @returns 1 if v1 > v2, -1 if v1 < v2, 0 if equal
  */
 declare function compareVersions(v1: string, v2: string): number;
 /**
  * Check if update is available
  */
-declare function checkForUpdates(): Promise<{
+declare function checkForUpdates(branch?: string): Promise<{
     hasUpdate: boolean;
     currentVersion: string;
     latestVersion: string | null;
+    installSource: 'npm' | 'github';
 }>;
 
 export { changeLanguage, checkForUpdates, compareVersions, createDefaultConfig, createDefaultRouting, getCcgDir, getConfigPath, getCurrentVersion, getLatestVersion, getWorkflowById, getWorkflowConfigs, i18n, init, initI18n, installAceTool, installAceToolRs, installWorkflows, migrateConfig, migrateToV1_4_0, needsMigration, readCcgConfig, showMainMenu, uninstallAceTool, uninstallWorkflows, update, writeCcgConfig };
-export type { AceToolConfig, CcgConfig, CliOptions, CliTool, CliToolConfig, CliToolMcpConfig, CollaborationMode, InitOptions, InstallResult, ModelRouting, ModelType, ReviewRouting, RoutingStrategy, RoutingTarget, SupportedLang, WorkflowConfig };
+export type { AceToolConfig, CcgConfig, CliOptions, CliTool, CliToolConfig, CliToolMcpConfig, CollaborationMode, InitOptions, InstallResult, LegacyReviewRouting, LegacyRoutingTarget, ModelRouting, ModelType, ReviewRouting, RoutingStrategy, RoutingTarget, SupportedLang, WorkflowConfig };
