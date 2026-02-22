@@ -1,4 +1,4 @@
-export { c as changeLanguage, a as checkForUpdates, b as compareVersions, d as createDefaultConfig, e as createDefaultRouting, g as getCcgDir, f as getConfigPath, h as getCurrentVersion, i as getLatestVersion, j as getWorkflowById, k as getWorkflowConfigs, l as i18n, m as init, n as initI18n, o as installAceTool, p as installAceToolRs, q as installWorkflows, r as migrateConfig, s as migrateToV1_4_0, t as needsMigration, u as readCcgConfig, v as showMainMenu, w as uninstallAceTool, x as uninstallWorkflows, y as update, z as writeCcgConfig } from './shared/ccg-workflow-modify.Cubnrd2p.mjs';
+export { C as CLI_TOOL_DISPLAY_NAMES, b as buildInstructionsContent, c as changeLanguage, a as checkForUpdates, d as compareVersions, e as createDefaultConfig, f as createDefaultRouting, g as getCcgDir, h as getConfigPath, i as getCurrentVersion, j as getLatestVersion, k as getWorkflowById, l as getWorkflowConfigs, m as i18n, n as init, o as initI18n, p as installAceTool, q as installAceToolRs, r as installInstructions, s as installWorkflows, t as migrateConfig, u as migrateToV1_4_0, v as needsMigration, w as readCcgConfig, x as showMainMenu, y as uninstallAceTool, z as uninstallWorkflows, A as update, B as writeCcgConfig } from './shared/ccg-workflow-modify.BCHCHrxw.mjs';
 import 'ansis';
 import 'inquirer';
 import 'node:child_process';
@@ -7,6 +7,7 @@ import 'node:os';
 import 'node:url';
 import 'pathe';
 import 'fs-extra';
+import 'node:fs/promises';
 import 'i18next';
 import 'ora';
 import 'smol-toml';

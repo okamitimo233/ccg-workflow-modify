@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import cac from 'cac';
 import ansis from 'ansis';
-import { A as diagnoseMcpConfig, B as isWindows, C as readClaudeCodeConfig, D as fixWindowsMcpConfig, E as writeClaudeCodeConfig, u as readCcgConfig, n as initI18n, v as showMainMenu, m as init, F as configMcp, G as version, l as i18n } from './shared/ccg-workflow-modify.Cubnrd2p.mjs';
+import { D as diagnoseMcpConfig, E as isWindows, F as readClaudeCodeConfig, G as fixWindowsMcpConfig, H as writeClaudeCodeConfig, w as readCcgConfig, o as initI18n, x as showMainMenu, n as init, I as configMcp, J as version, m as i18n } from './shared/ccg-workflow-modify.BCHCHrxw.mjs';
 import 'inquirer';
 import 'node:child_process';
 import 'node:util';
@@ -9,6 +9,7 @@ import 'node:os';
 import 'node:url';
 import 'pathe';
 import 'fs-extra';
+import 'node:fs/promises';
 import 'i18next';
 import 'ora';
 import 'smol-toml';

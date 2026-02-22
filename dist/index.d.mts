@@ -171,6 +171,8 @@ declare function installWorkflows(workflowIds: string[], installDir: string, for
     };
     liteMode?: boolean;
     mcpProvider?: string;
+    cli_tools?: CcgConfig['cli_tools'];
+    cli_tools_mcp?: CcgConfig['cli_tools_mcp'];
 }): Promise<InstallResult>;
 /**
  * Install and configure ace-tool MCP for Claude Code
@@ -210,6 +212,45 @@ declare function installAceToolRs(config: AceToolConfig): Promise<{
     message: string;
     configPath?: string;
 }>;
+
+declare const CLI_TOOL_DISPLAY_NAMES: Record<CliTool, string>;
+interface BuildResult {
+    content: string;
+    warnings: string[];
+}
+/**
+ * Assemble instruction file content from base template + MCP fragments.
+ *
+ * 1. Read base.md → replace {{CLI_TOOL_NAME}} with display name
+ * 2. Append each configured MCP fragment (skip missing with warning)
+ */
+declare function buildInstructionsContent(cliTool: CliTool, configuredMcpServers: string[], _options?: Record<string, unknown>): Promise<BuildResult>;
+interface InstallInstructionsResult {
+    success: boolean;
+    written: Array<{
+        tool: CliTool;
+        path: string;
+    }>;
+    skipped: Array<{
+        tool: CliTool;
+        reason: string;
+    }>;
+    warnings: string[];
+    errors: string[];
+}
+/**
+ * Generate and install instruction files for all enabled CLI tools.
+ *
+ * - Reads config.cli_tools to determine which tools are enabled
+ * - Resolves target path (with opencode fallback)
+ * - Builds content via buildInstructionsContent
+ * - Writes atomically with AUTO-GENERATED header
+ * - Never throws on individual tool failure; continues with remaining tools
+ */
+declare function installInstructions(config: {
+    cli_tools?: CcgConfig['cli_tools'];
+    cli_tools_mcp?: CcgConfig['cli_tools_mcp'];
+}, _options?: Record<string, unknown>): Promise<InstallInstructionsResult>;
 
 /**
  * Migration utilities for v1.4.0
@@ -260,5 +301,5 @@ declare function checkForUpdates(branch?: string): Promise<{
     installSource: 'npm' | 'github';
 }>;
 
-export { changeLanguage, checkForUpdates, compareVersions, createDefaultConfig, createDefaultRouting, getCcgDir, getConfigPath, getCurrentVersion, getLatestVersion, getWorkflowById, getWorkflowConfigs, i18n, init, initI18n, installAceTool, installAceToolRs, installWorkflows, migrateConfig, migrateToV1_4_0, needsMigration, readCcgConfig, showMainMenu, uninstallAceTool, uninstallWorkflows, update, writeCcgConfig };
+export { CLI_TOOL_DISPLAY_NAMES, buildInstructionsContent, changeLanguage, checkForUpdates, compareVersions, createDefaultConfig, createDefaultRouting, getCcgDir, getConfigPath, getCurrentVersion, getLatestVersion, getWorkflowById, getWorkflowConfigs, i18n, init, initI18n, installAceTool, installAceToolRs, installInstructions, installWorkflows, migrateConfig, migrateToV1_4_0, needsMigration, readCcgConfig, showMainMenu, uninstallAceTool, uninstallWorkflows, update, writeCcgConfig };
 export type { AceToolConfig, CcgConfig, CliOptions, CliTool, CliToolConfig, CliToolMcpConfig, CollaborationMode, InitOptions, InstallResult, LegacyReviewRouting, LegacyRoutingTarget, ModelRouting, ModelType, ReviewRouting, RoutingStrategy, RoutingTarget, SupportedLang, WorkflowConfig };
